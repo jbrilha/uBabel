@@ -1,0 +1,6 @@
+add_subdirectory(pico_scroll)
+add_subdirectory(pico_unicorn)
+add_subdirectory(pico_graphics)
+add_subdirectory(hershey_fonts)
+add_subdirectory(bitmap_fonts)
+add_subdirectory(babel_network)
