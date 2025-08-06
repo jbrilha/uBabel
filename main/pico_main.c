@@ -2,6 +2,7 @@
 #include <pico/time.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "pico/cyw43_arch.h"
 #include "pico/multicore.h"
@@ -16,7 +17,11 @@
 #include "lwip/sockets.h"
 #include "lwip/udp.h"
 
+#include "network_events.h"
 #include "network_manager.h"
+#include "event_dispatcher.h"
+#include "pico_buttons.h"
+
 #include "tcp.h"
 #include "udp.h"
 
@@ -35,11 +40,13 @@
 // Priorities of our threads - higher numbers are higher priority
 #define MAIN_TASK_PRIORITY (tskIDLE_PRIORITY + 2UL)
 #define SCROLL_TASK_PRIORITY (tskIDLE_PRIORITY + 1UL)
+#define UNICORN_TASK_PRIORITY (tskIDLE_PRIORITY + 1UL)
 #define WORKER_TASK_PRIORITY (tskIDLE_PRIORITY + 4UL)
 
 // Stack sizes of our threads in words (4 bytes)
 #define MAIN_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define SCROLL_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
+#define UNICORN_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define WORKER_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
 void wifi_connect_task(void *pvParameters) {
@@ -70,62 +77,150 @@ void wifi_connect_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void scroll_task(__unused void *params) {
+QueueHandle_t scroll_event_queue;
+
+void scroll_task_init() {
     pico_scroll_init();
     printf("PicoScroll initialized\n");
 
-    pico_scroll_clear();
-    pico_scroll_set_text("Hello World!", 255);
-    pico_scroll_update();
+    scroll_event_queue = xQueueCreate(10, sizeof(event_t*));
+    event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_UP);
+    event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN);
+}
 
-    printf("PicoScroll ready\n");
+void scroll_task(__unused void *params) {
+
+    pico_scroll_clear();
+    pico_scroll_update();
+    pico_scroll_scroll_text("Demo ON!", 255, 100);
+
+    printf("PicoScroll Started\n");
+
+    event_t* event = NULL;
+
+    char text[256];
 
     while (true) {
-        printf("123\n");
-        pico_scroll_scroll_text("123", 255, 100);
-        sleep_ms(500);
-        pico_scroll_clear();
-        sleep_ms(500);
-        printf("456\n");
-        pico_scroll_scroll_text("456", 255, 100);
-        pico_scroll_clear();
-        sleep_ms(500);
-        if(pico_scroll_is_pressed(PICO_SCROLL_A)) {
-            printf("Button A pressed\n");
+        printf("PicoScroll waiting for events...\n");
+        if(xQueueReceive(scroll_event_queue, &event, portMAX_DELAY) == pdTRUE) {
+            printf("PicoScroll received event");
+            printf("Event description: type=%d subtype=%d\n", event->type, event->subtype);
+            if(event->type == EVENT_TYPE_NOTIFICATION) {
+                if(event->subtype == EVENT_SUBTYPE_NETWORK_UP) {
+                    memset(text, 0, 256); // Clear text buffer
+                    printf("Network: %s\n", ((network_event_t*)event->payload)->ssid);
+                    printf("IP: %s\n", ((network_event_t*)event->payload)->ip);
+                    
+                    sprintf(text, "Network UP: %s %s", ((network_event_t*)event->payload)->ssid, ((network_event_t*)event->payload)->ip);
+                    pico_scroll_scroll_text(text, 255, 100 );
+                } else if(event->subtype == EVENT_SUBTYPE_NETWORK_DOWN) {
+                    pico_scroll_scroll_text("Network DOWN", 255, 100);
+                }
+                if(event->payload != NULL)
+                    free(event->payload); // Free the payload memory
+                free(event);
+            }
         }
     }
 }
 
-void unicorn_task(__unused void *params) {
+
+QueueHandle_t unicorn_event_queue;
+
+void unicorn_task_init() {
     pico_unicorn_init();
     printf("PicoUnicorn initialized\n");
+
+    unicorn_event_queue = xQueueCreate(10, sizeof(event_t*));
+    event_dispatcher_register(unicorn_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_A_PRESSED);
+    event_dispatcher_register(unicorn_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_B_PRESSED);
+    event_dispatcher_register(unicorn_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_X_PRESSED);
+    event_dispatcher_register(unicorn_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_Y_PRESSED);    
+}
+
+void unicorn_task(__unused void *params) {
+    event_t* event = NULL;
     
     int i = 0;
     while(true) {
-        i++;
-        pico_unicorn_clear();
-        for(int y = 0; y < 7; y++) {
-            for(int x = 0; x < 16; x++) {
-            int v = (x + y + (i / 100)) % 2 == 0 ? 0 : 100;
-            pico_unicorn_set_pixel(x, y, v);
+        if(xQueueReceive(unicorn_event_queue, &event, pdMS_TO_TICKS(20)) == pdTRUE) {
+            printf("PicoUnicorn received event");
+            printf("Event description: type=%d subtype=%d\n", event->type, event->subtype);
+
+            float pulse = fmod(((float)i) / 20.0f, M_PI * 2.0f);
+            int v = (int)((sin(pulse) * 50.0f) + 50.0f);
+
+            if(event->type == EVENT_TYPE_NOTIFICATION) {
+                if(event->subtype == EVENT_BUTTON_A_PRESSED) {
+                    pico_unicorn_set_pixel(0, 0, v);
+                    pico_unicorn_set_pixel(0, 1, v);
+                    pico_unicorn_set_pixel(1, 0, v);
+                    pico_unicorn_set_pixel(1, 1, v);
+                    pico_unicorn_set_pixel(1, 2, v / 2);
+                    pico_unicorn_set_pixel(0, 2, v / 2);
+                    pico_unicorn_set_pixel(2, 0, v / 2);
+                    pico_unicorn_set_pixel(2, 1, v / 2);
+                } else if(event->subtype == EVENT_BUTTON_B_PRESSED) {
+                    pico_unicorn_set_pixel(0, 6, v);
+                    pico_unicorn_set_pixel(0, 5, v);
+                    pico_unicorn_set_pixel(1, 6, v);
+                    pico_unicorn_set_pixel(1, 5, v);
+                    pico_unicorn_set_pixel(1, 4, v / 2);
+                    pico_unicorn_set_pixel(0, 4, v / 2);
+                    pico_unicorn_set_pixel(2, 6, v / 2);
+                    pico_unicorn_set_pixel(2, 5, v / 2);
+                } else if(event->subtype == EVENT_BUTTON_X_PRESSED) {
+                    pico_unicorn_set_pixel(15, 0, v);
+                    pico_unicorn_set_pixel(15, 1, v);
+                    pico_unicorn_set_pixel(14, 0, v);
+                    pico_unicorn_set_pixel(14, 1, v);
+                    pico_unicorn_set_pixel(14, 2, v / 2);
+                    pico_unicorn_set_pixel(15, 2, v / 2);
+                    pico_unicorn_set_pixel(13, 0, v / 2);
+                    pico_unicorn_set_pixel(13, 1, v / 2);
+                } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
+                   pico_unicorn_set_pixel(15, 6, v);
+                    pico_unicorn_set_pixel(15, 5, v);
+                    pico_unicorn_set_pixel(14, 6, v);
+                    pico_unicorn_set_pixel(14, 5, v);
+                    pico_unicorn_set_pixel(14, 4, v / 2);
+                    pico_unicorn_set_pixel(15, 4, v / 2);
+                    pico_unicorn_set_pixel(13, 6, v / 2);
+                    pico_unicorn_set_pixel(13, 5, v / 2);
+                }
+                free(event); // Free the event memory
+            }
+        } else {
+            
+            pico_unicorn_clear();
+            for(int y = 0; y < 7; y++) {
+                for(int x = 0; x < 16; x++) {
+                int v = (x + y + (i / 100)) % 2 == 0 ? 0 : 100;
+                pico_unicorn_set_pixel(x, y, v);
+                }
             }
         }
-
-        //pico_unicorn.update();
-        sleep_ms(100);
+        i++;
     }
 }
 
 
 void main_task(__unused void *params) {
-    // xTaskCreate(scroll_task, "scroll_task", MAIN_TASK_STACK_SIZE, NULL,
-    //             MAIN_TASK_PRIORITY, NULL);
+    event_dispatcher_init();
+    printf("Event dispatcher initialized\n");
 
-    xTaskCreate(unicorn_task, "unicorn_task", MAIN_TASK_STACK_SIZE, NULL,
-                MAIN_TASK_PRIORITY, NULL);
+    scroll_task_init();
+    unicorn_task_init();
+    pico_buttons_init();
 
-    // xTaskCreate(wifi_connect_task, "wifi_task", 2048, NULL,
-    //             WORKER_TASK_PRIORITY, NULL);
+    xTaskCreate(scroll_task, "scroll_task", SCROLL_TASK_STACK_SIZE, NULL,
+                SCROLL_TASK_PRIORITY, NULL);
+
+    xTaskCreate(unicorn_task, "unicorn_task", UNICORN_TASK_STACK_SIZE, NULL,
+                UNICORN_TASK_PRIORITY, NULL);
+
+    xTaskCreate(pico_buttons_task, "buttons_task", configMINIMAL_STACK_SIZE, NULL,
+                WORKER_TASK_PRIORITY, NULL);
 
     xTaskCreate(
         network_manager_task,   // Task function
