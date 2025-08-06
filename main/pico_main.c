@@ -166,7 +166,7 @@ void unicorn_task(__unused void *params) {
             }
         } 
 
-        i++
+        i++;
             
         float pulse = fmod(((float)i) / 20.0f, M_PI * 2.0f);
         int v = (int)((sin(pulse) * 50.0f) + 50.0f);
