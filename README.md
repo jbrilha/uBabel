@@ -1,4 +1,4 @@
-# esp2pico
+# Micro-Babel Core
 
 ## Setup
 
