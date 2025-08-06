@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "event_dispatcher.h"
 #include "pico/cyw43_arch.h"
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
@@ -70,10 +71,19 @@ void wifi_connect_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void scroll_task(__unused void *params) {
+QueueHandle_t scroll_event_queue;
+
+void scroll_task_init() {
     pico_scroll_init();
     printf("PicoScroll initialized\n");
 
+    scroll_event_queue = xQueueCreate(10, sizeof(event_t*));
+    event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_UP);
+    event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN);
+}
+
+
+void scroll_task(__unused void *params) {
     pico_scroll_clear();
     pico_scroll_set_text("Hello World!", 255);
     pico_scroll_update();
@@ -118,8 +128,14 @@ void unicorn_task(__unused void *params) {
 
 
 void main_task(__unused void *params) {
-    // xTaskCreate(scroll_task, "scroll_task", MAIN_TASK_STACK_SIZE, NULL,
-    //             MAIN_TASK_PRIORITY, NULL);
+    event_dispatcher_init();
+    printf("Event dispatcher initialized\n");
+
+    scroll_task_init();
+
+
+    xTaskCreate(scroll_task, "scroll_task", MAIN_TASK_STACK_SIZE, NULL,
+                MAIN_TASK_PRIORITY, NULL);
 
     xTaskCreate(unicorn_task, "unicorn_task", MAIN_TASK_STACK_SIZE, NULL,
                 MAIN_TASK_PRIORITY, NULL);
