@@ -30,10 +30,8 @@ static const char *TAG = "ESP32";
 
 #ifndef BUILD_ESP32
 #define LOG_INFO(tag, fmt, ...) printf("[%s] " fmt "\n", tag, ##__VA_ARGS__)
-#define LOG_ERROR(tag, fmt, ...)                                               \
-    printf("[ERROR %s] " fmt "\n", tag, ##__VA_ARGS__)
-#define LOG_WARN(tag, fmt, ...)                                               \
-    printf("[WARNING %s] " fmt "\n", tag, ##__VA_ARGS__)
+#define LOG_ERROR(tag, fmt, ...) printf("[ERROR %s] " fmt "\n", tag, ##__VA_ARGS__)
+#define LOG_WARN(tag, fmt, ...) printf("[WARNING %s] " fmt "\n", tag, ##__VA_ARGS__)
 #endif
 
 #endif // PLATFORM_H

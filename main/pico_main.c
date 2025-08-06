@@ -102,6 +102,7 @@ void unicorn_task(__unused void *params) {
     
     int i = 0;
     while(true) {
+        printf("aaa\n");
         i++;
         pico_unicorn_clear();
         for(int y = 0; y < 7; y++) {
@@ -112,7 +113,7 @@ void unicorn_task(__unused void *params) {
         }
 
         //pico_unicorn.update();
-        sleep_ms(10);
+        sleep_ms(1000);
     }
 }
 
@@ -132,7 +133,7 @@ void main_task(__unused void *params) {
         "NetworkManager",       // Task name
         4096,                   // Stack size in words
         NULL,                   // Task parameters
-        1,                      // Priority
+        5,                      // Priority
         NULL                    // Task handle
     );
 

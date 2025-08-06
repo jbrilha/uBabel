@@ -10,6 +10,8 @@
 #include "tcp.h"
 #include "udp.h"
 
+#include "network_manager.h"
+
 #define MAX_MSG_SIZE 128
 #define MAX_PEERS 5
 
@@ -21,6 +23,8 @@
 
 #define TCP_SERVER_TASK_STACK_SIZE 4096
 #define TCP_SERVER_TASK_PRIORITY 5
+static bool esp32_wifi_initialized = false;
+static bool esp32_scan_done = false;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
@@ -34,6 +38,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "station disconnected from AP");
     }
 }
+
 
 void wifi_init(void) {
     ESP_ERROR_CHECK(esp_netif_init());
@@ -62,12 +67,21 @@ void wifi_init(void) {
 void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
 
-    wifi_init();
+    // wifi_init();
+    //
+    // vTaskDelay(pdMS_TO_TICKS(3000));
+    //
+    // xTaskCreate(udp_server_task, "udp_server", UDP_SERVER_TASK_STACK_SIZE, NULL,
+    //             UDP_SERVER_TASK_PRIORITY, NULL);
+    // xTaskCreate(tcp_server_task, "tcp_server", TCP_SERVER_TASK_STACK_SIZE, NULL,
+    //             TCP_SERVER_TASK_PRIORITY, NULL);
 
-    vTaskDelay(pdMS_TO_TICKS(3000));
-
-    xTaskCreate(udp_server_task, "udp_server", UDP_SERVER_TASK_STACK_SIZE, NULL,
-                UDP_SERVER_TASK_PRIORITY, NULL);
-    xTaskCreate(tcp_server_task, "tcp_server", TCP_SERVER_TASK_STACK_SIZE, NULL,
-                TCP_SERVER_TASK_PRIORITY, NULL);
+    xTaskCreate(
+        network_manager_task,   // Task function
+        "NetworkManager",       // Task name
+        4096,                   // Stack size in words
+        NULL,                   // Task parameters
+        1,                      // Priority
+        NULL                    // Task handle
+    );
 }
