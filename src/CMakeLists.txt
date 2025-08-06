@@ -14,7 +14,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     pico_stdlib
     pico_scroll
     pico_unicorn
-    babel_network
+    micro_babel_network
+    micro_babel_event
 )
 
 pico_enable_stdio_usb(${PROJECT_NAME} 1)
