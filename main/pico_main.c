@@ -88,15 +88,6 @@ void scroll_task_init() {
     event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_UP);
     event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN);
 }
-<<<<<<< HEAD
-=======
-
-
-void scroll_task(__unused void *params) {
-    pico_scroll_clear();
-    pico_scroll_set_text("Hello World!", 255);
-    pico_scroll_update();
->>>>>>> 2a4c630e0e58e8152b34fa801059af5bd450e8c9
 
 void scroll_task(__unused void *params) {
 
@@ -218,15 +209,6 @@ void unicorn_task(__unused void *params) {
 void main_task(__unused void *params) {
     event_dispatcher_init();
     printf("Event dispatcher initialized\n");
-<<<<<<< HEAD
-=======
-
-    scroll_task_init();
-
-
-    xTaskCreate(scroll_task, "scroll_task", MAIN_TASK_STACK_SIZE, NULL,
-                MAIN_TASK_PRIORITY, NULL);
->>>>>>> 2a4c630e0e58e8152b34fa801059af5bd450e8c9
 
     scroll_task_init();
     unicorn_task_init();
