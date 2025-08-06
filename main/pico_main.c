@@ -141,67 +141,87 @@ void unicorn_task_init() {
 
 void unicorn_task(__unused void *params) {
     event_t* event = NULL;
-    
+    bool button_a = false;
+    bool button_b = false;
+    bool button_x = false;
+    bool button_y = false;
+
     int i = 0;
     while(true) {
         if(xQueueReceive(unicorn_event_queue, &event, pdMS_TO_TICKS(20)) == pdTRUE) {
             printf("PicoUnicorn received event");
             printf("Event description: type=%d subtype=%d\n", event->type, event->subtype);
 
-            float pulse = fmod(((float)i) / 20.0f, M_PI * 2.0f);
-            int v = (int)((sin(pulse) * 50.0f) + 50.0f);
-
             if(event->type == EVENT_TYPE_NOTIFICATION) {
                 if(event->subtype == EVENT_BUTTON_A_PRESSED) {
-                    pico_unicorn_set_pixel(0, 0, v);
-                    pico_unicorn_set_pixel(0, 1, v);
-                    pico_unicorn_set_pixel(1, 0, v);
-                    pico_unicorn_set_pixel(1, 1, v);
-                    pico_unicorn_set_pixel(1, 2, v / 2);
-                    pico_unicorn_set_pixel(0, 2, v / 2);
-                    pico_unicorn_set_pixel(2, 0, v / 2);
-                    pico_unicorn_set_pixel(2, 1, v / 2);
+                    button_a = !button_a;   
                 } else if(event->subtype == EVENT_BUTTON_B_PRESSED) {
-                    pico_unicorn_set_pixel(0, 6, v);
-                    pico_unicorn_set_pixel(0, 5, v);
-                    pico_unicorn_set_pixel(1, 6, v);
-                    pico_unicorn_set_pixel(1, 5, v);
-                    pico_unicorn_set_pixel(1, 4, v / 2);
-                    pico_unicorn_set_pixel(0, 4, v / 2);
-                    pico_unicorn_set_pixel(2, 6, v / 2);
-                    pico_unicorn_set_pixel(2, 5, v / 2);
+                    button_b = !button_b;
                 } else if(event->subtype == EVENT_BUTTON_X_PRESSED) {
-                    pico_unicorn_set_pixel(15, 0, v);
-                    pico_unicorn_set_pixel(15, 1, v);
-                    pico_unicorn_set_pixel(14, 0, v);
-                    pico_unicorn_set_pixel(14, 1, v);
-                    pico_unicorn_set_pixel(14, 2, v / 2);
-                    pico_unicorn_set_pixel(15, 2, v / 2);
-                    pico_unicorn_set_pixel(13, 0, v / 2);
-                    pico_unicorn_set_pixel(13, 1, v / 2);
+                    button_x = !button_x;
                 } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
-                   pico_unicorn_set_pixel(15, 6, v);
-                    pico_unicorn_set_pixel(15, 5, v);
-                    pico_unicorn_set_pixel(14, 6, v);
-                    pico_unicorn_set_pixel(14, 5, v);
-                    pico_unicorn_set_pixel(14, 4, v / 2);
-                    pico_unicorn_set_pixel(15, 4, v / 2);
-                    pico_unicorn_set_pixel(13, 6, v / 2);
-                    pico_unicorn_set_pixel(13, 5, v / 2);
+                    button_y = !button_y;
                 }
                 free(event); // Free the event memory
             }
-        } else {
+        } 
+
+        i++
             
-            pico_unicorn_clear();
-            for(int y = 0; y < 7; y++) {
-                for(int x = 0; x < 16; x++) {
-                int v = (x + y + (i / 100)) % 2 == 0 ? 0 : 100;
-                pico_unicorn_set_pixel(x, y, v);
-                }
+        float pulse = fmod(((float)i) / 20.0f, M_PI * 2.0f);
+        int v = (int)((sin(pulse) * 50.0f) + 50.0f);
+
+        pico_unicorn_clear();
+        for(int y = 0; y < 7; y++) {
+            for(int x = 0; x < 16; x++) {
+            int v = (x + y + (i / 100)) % 2 == 0 ? 0 : 100;
+            pico_unicorn_set_pixel(x, y, v);
             }
         }
-        i++;
+
+        if(button_a) {
+            pico_unicorn_set_pixel_rgb(0, 0, 255, 0, 0);
+            pico_unicorn_set_pixel_rgb(0, 1, 255, 0, 0);
+            pico_unicorn_set_pixel_rgb(1, 0, 255, 0, 0);
+            pico_unicorn_set_pixel_rgb(1, 1, 255, 0, 0);
+            pico_unicorn_set_pixel_rgb(1, 2, 255 / 2, 0, 0);
+            pico_unicorn_set_pixel_rgb(0, 2, 255 / 2, 0, 0);
+            pico_unicorn_set_pixel_rgb(2, 0, 255 / 2, 0, 0);
+            pico_unicorn_set_pixel_rgb(2, 1, 255 / 2, 0, 0);
+        }
+
+        if(button_b) {
+            pico_unicorn_set_pixel_rgb(0, 6, 0, 255, 0);
+            pico_unicorn_set_pixel_rgb(0, 5, 0, 255, 0);
+            pico_unicorn_set_pixel_rgb(1, 6, 0, 255, 0);
+            pico_unicorn_set_pixel_rgb(1, 5, 0, 255, 0);
+            pico_unicorn_set_pixel_rgb(1, 4, 0, 255 / 2, 0);
+            pico_unicorn_set_pixel_rgb(0, 4, 0, 255 / 2, 0);
+            pico_unicorn_set_pixel_rgb(2, 6, 0, 255 / 2, 0);
+            pico_unicorn_set_pixel_rgb(2, 5, 0, 255 / 2, 0);
+        }
+
+        if(button_c) {
+            pico_unicorn_set_pixel_rgb(15, 0, 0, 0, 255);
+            pico_unicorn_set_pixel_rgb(15, 1, 0, 0, 255);
+            pico_unicorn_set_pixel_rgb(14, 0, 0, 0, 255);
+            pico_unicorn_set_pixel_rgb(14, 1, 0, 0, 255);
+            pico_unicorn_set_pixel_rgb(14, 2, 0, 0, 255 / 2);
+            pico_unicorn_set_pixel_rgb(15, 2, 0, 0, 255 / 2);
+            pico_unicorn_set_pixel_rgb(13, 0, 0, 0, 255 / 2);
+            pico_unicorn_set_pixel_rgb(13, 1, 0, 0, 255 / 2);
+        }
+
+        if(button_d) {
+            pico_unicorn_set_pixel_rgb(15, 6, 255, 0, 255);
+            pico_unicorn_set_pixel_rgb(15, 5, 255, 0, 255);
+            pico_unicorn_set_pixel_rgb(14, 6, 255, 0, 255);
+            pico_unicorn_set_pixel_rgb(14, 5, 255, 0, 255);
+            pico_unicorn_set_pixel_rgb(14, 4, 255 / 2, 0, 255 / 2);
+            pico_unicorn_set_pixel_rgb(15, 4, 255 / 2, 0, 255 / 2);
+            pico_unicorn_set_pixel_rgb(13, 6, 255 / 2, 0, 255 / 2);
+            pico_unicorn_set_pixel_rgb(13, 5, 255 / 2, 0, 255 / 2);
+        }
     }
 }
 
