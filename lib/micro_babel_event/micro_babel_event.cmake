@@ -10,6 +10,3 @@ target_sources(micro_babel_event INTERFACE
 )
 
 target_include_directories(micro_babel_event INTERFACE ${CMAKE_CURRENT_LIST_DIR})
-
-# Pull in pico libraries that we need
-target_link_libraries(micro_babel_event INTERFACE FreeRTOS-Kernel-Heap4)

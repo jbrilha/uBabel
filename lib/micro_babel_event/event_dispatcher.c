@@ -3,7 +3,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <semphr.h>
 
 #define DISPATCHER_QUEUE_LENGTH 32  // Maximum number of events in the dispatcher queue
 
@@ -24,6 +23,8 @@ event_subtype_subscription_t* find_subtype_subscription(event_type_subscription_
         }
         current = current->next;
     }
+
+    return current;
 }
 
 event_subtype_subscription_t* find_or_create_subtype_subscription(event_type_subscription_t* node, event_subtype_t subtype) {

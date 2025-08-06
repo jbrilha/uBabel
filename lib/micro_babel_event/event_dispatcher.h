@@ -1,10 +1,8 @@
 #ifndef MICRO_BABEL_EVENT_DISPATCHER_H
 #define MICRO_BABEL_EVENT_DISPATCHER_H
 
+#include "platform.h"
 #include "event.h"
-#include "FreeRTOS.h"
-#include "queue.h"
-
 
 #define QUEUE_INITIAL_CAPACITY 3
 
@@ -40,4 +38,3 @@ bool event_dispatcher_post(event_t* event);
 #endif
 
 #endif // MICRO_BABEL_EVENT_DISPATCHER_H
-

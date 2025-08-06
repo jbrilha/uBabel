@@ -1,3 +1,8 @@
 build*
 .vscode
 **.DS_Store
+compile_commands.json
+sdkconfig*
+build*/
+.cache/
+.pio

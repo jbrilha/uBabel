@@ -1,0 +1,36 @@
+if(DEFINED BUILD_PICO)
+    add_executable(${PROJECT_NAME}
+        pico_main.c
+    )
+
+    target_sources(${PROJECT_NAME} PRIVATE
+        pico_scroll_wrapper.cpp
+        pico_unicorn_wrapper.cpp
+    )
+
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+    )
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        pico_async_context_freertos
+        FreeRTOS-Kernel-Heap4
+        pico_cyw43_arch_lwip_sys_freertos
+        # pico_cyw43_arch_lwip_threadsafe_background
+        pico_stdlib
+        pico_scroll
+        pico_unicorn
+        micro_babel_network
+        micro_babel_event
+        tcp
+        udp
+    )
+
+    pico_enable_stdio_usb(${PROJECT_NAME} 1)
+    pico_enable_stdio_uart(${PROJECT_NAME} 0)
+
+    pico_add_extra_outputs(${PROJECT_NAME})
+else()
+    idf_component_register(SRCS "esp32_main.c"
+                    INCLUDE_DIRS "." "../shared")
+endif()

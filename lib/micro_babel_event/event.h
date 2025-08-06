@@ -5,7 +5,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
-#include "pico/stdlib.h"
+
+#include "platform.h"
+
 #include "lwip/ip_addr.h"
 
 #define MAX_EVENT_SUBSCRIBERS 8
