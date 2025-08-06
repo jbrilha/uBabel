@@ -10,6 +10,3 @@ target_sources(babel_network INTERFACE
 )
 
 target_include_directories(babel_network INTERFACE ${CMAKE_CURRENT_LIST_DIR})
-
-# Pull in pico libraries that we need
-target_link_libraries(babel_network INTERFACE pico_stdlib)
