@@ -201,7 +201,7 @@ void unicorn_task(__unused void *params) {
             pico_unicorn_set_pixel_rgb(2, 5, 0, 255 / 2, 0);
         }
 
-        if(button_c) {
+        if(button_x) {
             pico_unicorn_set_pixel_rgb(15, 0, 0, 0, 255);
             pico_unicorn_set_pixel_rgb(15, 1, 0, 0, 255);
             pico_unicorn_set_pixel_rgb(14, 0, 0, 0, 255);
@@ -212,7 +212,7 @@ void unicorn_task(__unused void *params) {
             pico_unicorn_set_pixel_rgb(13, 1, 0, 0, 255 / 2);
         }
 
-        if(button_d) {
+        if(button_y) {
             pico_unicorn_set_pixel_rgb(15, 6, 255, 0, 255);
             pico_unicorn_set_pixel_rgb(15, 5, 255, 0, 255);
             pico_unicorn_set_pixel_rgb(14, 6, 255, 0, 255);
