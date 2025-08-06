@@ -4,6 +4,8 @@
 #include "event_dispatcher.h"
 
 
+#define debounce_cycles 20
+
 typedef enum pin {
   A     = 12,
   B     = 13,
@@ -36,7 +38,7 @@ void pico_buttons_task(__unused void *params) {
       if(event) {
         event_dispatcher_post(event);
       }
-      debounceA = 5;
+      debounceA =debounce_cycles;
     } else if(debounceA > 0) {
       debounceA--;
     }
@@ -46,7 +48,7 @@ void pico_buttons_task(__unused void *params) {
       if(event) {
         event_dispatcher_post(event);
       } 
-      debounceB = 5;
+      debounceB = debounce_cycles;
     } else if(debounceB > 0) {
       debounceB--;
     }
@@ -56,7 +58,7 @@ void pico_buttons_task(__unused void *params) {
       if(event) {
         event_dispatcher_post(event);
       }
-      debounceX = 5;
+      debounceX = debounce_cycles;
     } else if(debounceX > 0) {
       debounceX--;
     }
@@ -66,7 +68,7 @@ void pico_buttons_task(__unused void *params) {
       if(event) {
         event_dispatcher_post(event);
       } 
-      debounceY = 5;
+      debounceY = debounce_cycles;
     } else if(debounceY > 0) {
       debounceY--;    
     }
