@@ -20,7 +20,8 @@ if(DEFINED BUILD_PICO)
         pico_stdlib
         pico_scroll
         pico_unicorn
-        babel_network
+        micro_babel_network
+        micro_babel_event
         tcp
         udp
     )

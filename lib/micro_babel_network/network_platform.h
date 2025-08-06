@@ -23,6 +23,7 @@ void network_platform_enable_sta_mode(void);
 void network_platform_enable_ap_mode(const char *ssid, const char *password);
 int network_platform_connect_wifi(const char *ssid, const char *password,
                                   int timeout_ms);
+void network_platform_disconnect_wifi(void);
 int network_platform_wifi_scan(scan_callback_t callback);
 bool network_platform_scan_active(void);
 void network_platform_poll(void);

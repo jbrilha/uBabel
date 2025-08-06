@@ -102,7 +102,6 @@ void unicorn_task(__unused void *params) {
     
     int i = 0;
     while(true) {
-        printf("aaa\n");
         i++;
         pico_unicorn_clear();
         for(int y = 0; y < 7; y++) {
@@ -113,7 +112,7 @@ void unicorn_task(__unused void *params) {
         }
 
         //pico_unicorn.update();
-        sleep_ms(1000);
+        sleep_ms(100);
     }
 }
 

@@ -1,5 +1,6 @@
 // network_manager.c
 #include "network_manager.h"
+#include "event_dispatcher.h"
 #include "network_config.h"
 #include "network_events.h"
 
@@ -97,6 +98,21 @@ static bool try_connect_wifi(const wifi_credentials_t *creds) {
     return network_platform_connect_wifi(creds->ssid, creds->pass, 10000) == 0;
 }
 
+/* static int scan_result(void *env, const cyw43_ev_scan_result_t *result) {
+    if (result) {
+        printf("ssid: %-32s rssi: %4d chan: %3d mac:
+%02x:%02x:%02x:%02x:%02x:%02x sec: %u\n", result->ssid, result->rssi,
+result->channel, result->bssid[0], result->bssid[1], result->bssid[2],
+result->bssid[3], result->bssid[4], result->bssid[5], result->auth_mode);
+
+        if (result->auth_mode == CYW43_AUTH_OPEN && strlen(result->ssid) > 0) {
+            printf("Found open network: %s (RSSI: %d)\n", result->ssid,
+result->rssi); add_open_network(result->ssid, result->rssi);
+        }
+    }
+    return 0;
+} */
+
 #ifdef BUILD_PICO
 static int scan_result(void *env, const cyw43_ev_scan_result_t *result) {
     if (result) {
@@ -141,24 +157,6 @@ static void scan_result(void) {
     }
 }
 #endif
-
-// static int scan_result(void *env, const cyw43_ev_scan_result_t *result) {
-//     if (result) {
-//         printf("ssid: %-32s rssi: %4d chan: %3d mac: "
-//                "%02x:%02x:%02x:%02x:%02x:%02x sec: %u\n",
-//                result->ssid, result->rssi, result->channel, result->bssid[0],
-//                result->bssid[1], result->bssid[2], result->bssid[3],
-//                result->bssid[4], result->bssid[5], result->auth_mode);
-//
-//         if (result->auth_mode == CYW43_AUTH_OPEN && strlen(result->ssid) > 0)
-//         {
-//             printf("Found open network: %s (RSSI: %d)\n", result->ssid,
-//                    result->rssi);
-//             add_open_network(result->ssid, result->rssi);
-//         }
-//     }
-//     return 0;
-// }
 
 void scan_for_open_networks() {
     if (scan_in_progress) {
@@ -297,7 +295,7 @@ bool check_connectivity_via_ping_gateway() {
             (struct icmp_echo_hdr *)(recv_buf + (IPH_HL(iphdr) * 4));
 
         if ((icmphdr->id == hdr.id) && (icmphdr->seqno == hdr.seqno)) {
-            printf("Ping to gateway successful\n");
+            // printf("Ping to gateway successful\n");
             return true;
         }
     }
@@ -310,7 +308,7 @@ bool check_connectivity_via_dns() {
     const ip_addr_t *dns_ip = dns_getserver(0);
     if (ip_addr_isany(dns_ip)) {
         printf("No DNS server assigned by DHCP.\n");
-        return false;
+        return true;
     }
 
     char ip_str[IPADDR_STRLEN_MAX];
@@ -362,19 +360,40 @@ void network_manager_task(void *params) {
                         struct netif *netif = netif_list;
                         ip_addr_t ip = netif->ip_addr;
 
-                        network_event_t evt = {
-                            .type = EVENT_WIFI_CONNECTED,
-                            .ip = ip,
-                        };
-                        strncpy(evt.ssid, cfg.wifi_list[i].ssid,
-                                sizeof(evt.ssid) - 1);
+                        network_event_t *evt = malloc(sizeof(network_event_t));
+                        if (!evt) {
+                            printf("Failed to allocate memory for network "
+                                   "event\n");
+                            vTaskDelete(NULL);
+                        }
+                        evt->type = EVENT_WIFI_CONNECTED;
+                        memset(evt->ssid, 0, 33); // Clear SSID
+                        strncpy(evt->ssid, cfg.wifi_list[i].ssid, 32);
+                        memset(evt->ip, 0, 16); // Clear IP
+#ifdef BUILD_PICO
+                        ip4addr_ntoa_r(&ip, evt->ip, 15);
+#elif defined(BUILD_ESP32)
+                        strcpy(evt->ip, ip4addr_ntoa(ip_2_ip4(&ip)));
+#endif
+
+                        event_t *event = create_event(
+                            EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_UP,
+                            evt, sizeof(network_event_t *));
+
+                        if (event != NULL) {
+                            event_dispatcher_post(event);
+                        } else {
+                            printf("Failed to create network event\n");
+                            free(evt);
+                        }
 
 #ifdef BUILD_PICO
-                        printf("[EVENT] Connected to %s | IP: %s\n", evt.ssid,
-                               ip4addr_ntoa(&evt.ip));
+                        printf("[EVENT] Connected to %s | IP: %s\n",
+                               cfg.wifi_list[i].ssid, ip4addr_ntoa(&ip));
 #elif defined(BUILD_ESP32)
-                        printf("[EVENT] Connected to %s | IP: %s\n", evt.ssid,
-                               ip4addr_ntoa(ip_2_ip4(&evt.ip)));
+                        printf("[EVENT] Connected to %s | IP: %s\n",
+                               cfg.wifi_list[i].ssid,
+                               ip4addr_ntoa(ip_2_ip4(&ip)));
 #endif
                     }
                 }
@@ -397,23 +416,44 @@ void network_manager_task(void *params) {
                             struct netif *netif = netif_list;
                             ip_addr_t ip = netif->ip_addr;
 
-                            network_event_t evt = {
-                                .type = EVENT_WIFI_CONNECTED,
-                                .ip = ip,
-                            };
-                            strncpy(evt.ssid, current->ssid,
-                                    sizeof(evt.ssid) - 1);
+                            network_event_t *evt =
+                                malloc(sizeof(network_event_t));
+                            if (!evt) {
+                                printf("Failed to allocate memory for network "
+                                       "event\n");
+                                vTaskDelete(NULL);
+                            }
+                            evt->type = EVENT_WIFI_CONNECTED;
+                            memset(evt->ssid, 0, 33); // Clear SSID
+                            strncpy(evt->ssid, current->ssid,
+                                    strlen(current->ssid));
+                            memset(evt->ip, 0, 16); // Clear IP
+#ifdef BUILD_PICO
+                            ip4addr_ntoa_r(&ip, evt->ip, 15);
+#elif defined(BUILD_ESP32)
+                            strcpy(evt->ip, ip4addr_ntoa(ip_2_ip4(&ip)));
+#endif
 
-                            // emit or handle evt here
+                            event_t *event =
+                                create_event(EVENT_TYPE_NOTIFICATION,
+                                             EVENT_SUBTYPE_NETWORK_UP, evt,
+                                             sizeof(network_event_t *));
+
+                            if (event != NULL) {
+                                event_dispatcher_post(event);
+                            } else {
+                                printf("Failed to create network event\n");
+                                free(evt);
+                            }
+
 #ifdef BUILD_PICO
                             printf("[EVENT] Connected to open network %s | IP: "
                                    "%s\n",
-                                   evt.ssid, ip4addr_ntoa(&evt.ip));
+                                   current->ssid, ip4addr_ntoa(&ip));
 #elif defined(BUILD_ESP32)
                             printf("[EVENT] Connected to %s | IP: %s\n",
-                                   evt.ssid, ip4addr_ntoa(ip_2_ip4(&evt.ip)));
+                                   current->ssid, ip4addr_ntoa(ip_2_ip4(&ip)));
 #endif
-                            connected = true;
                         } else {
                             current = current->next;
                         }
@@ -433,13 +473,30 @@ void network_manager_task(void *params) {
 
             if (curr_status != 1 || !check_connectivity_via_ping_gateway()) {
                 printf("[EVENT] Wi-Fi link lost.\n");
-                network_event_t evt = {.type = EVENT_WIFI_DISCONNECTED};
+
+                network_event_t *evt = malloc(sizeof(network_event_t));
+                if (!evt) {
+                    printf("Failed to allocate memory for network event\n");
+                    vTaskDelete(NULL);
+                }
+                evt->type = EVENT_WIFI_DISCONNECTED;
+                evt->ssid[0] = '\0'; // Clear SSID
+                evt->ip[0] = '\0';   // Clear IP
+
+                event_t *event = create_event(EVENT_TYPE_NOTIFICATION,
+                                              EVENT_SUBTYPE_NETWORK_DOWN, evt,
+                                              sizeof(network_event_t));
+
+                if (event != NULL) {
+                    event_dispatcher_post(event);
+                } else {
+                    printf("Failed to create network event\n");
+                    free(evt);
+                }
+
                 connected = false;
                 // emit or handle evt here
                 printf("[EVENT] Disconnected from Wi-Fi.\n");
-            } else {
-                // Still connected, just wait
-                printf("NetworkManager: still connected to Wi-Fi.\n");
             }
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
