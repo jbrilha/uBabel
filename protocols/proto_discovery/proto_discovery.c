@@ -100,6 +100,7 @@ static int initialize_udp_socket(char* local_ip) {
 }
 
 static void udp_forwarder_task(void* params) {
+    printf("[proto_discovery:] starting to receive multicast messages in IP: %s\n", (char*) params);
     socket = initialize_udp_socket((char*) params);
     
     discovery_message_t* msg = NULL;
@@ -108,7 +109,7 @@ static void udp_forwarder_task(void* params) {
     while (true) {
         msg = malloc(sizeof(discovery_message_t));
         if(msg == NULL) {
-          printf("[DISCOVERY:] Could not allocate memory for a message buffer.");
+          printf("[proto_discovery:] Could not allocate memory for a message buffer.");
           vTaskDelete(NULL);
         }
         slen = sizeof(msg->sender_addr);
@@ -206,5 +207,5 @@ bool proto_discovery_init(void) {
     }
 
     xTaskCreate(proto_discovery_task, "proto_discovery_task", MAX_UDP_PACKET_SIZE + 1024, NULL, 2, NULL);
-    printf("[proto_discovery] Initialized and listening on %s:%d\n", DISCOVERY_MULTICAST_ADDR, DISCOVERY_PORT);
+    printf("[proto_discovery] Initialized");
 }
