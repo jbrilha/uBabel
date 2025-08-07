@@ -77,6 +77,25 @@ bool add_event_subscription(event_subtype_subscription_t* subtype_node, QueueHan
     return true;    
 }
 
+void remove_event_subscription(event_subtype_subscription_t* subtype_node, QueueHandle_t queue) {
+    bool found = false;
+    for(int i = 0; i < subtype_node->queue_count; i++) {
+        if(!found) {
+            if(subtype_node->queues[i] == queue) {
+                found = true;
+                i--;
+            }
+        } else {
+            if(i < subtype_node->queue_capacity - 1)
+                subtype_node->queues[i] = subtype_node->queues[i+1];
+            else
+                subtype_node->queues[i] = NULL;
+        }
+    }
+    if(found)
+        subtype_node->queue_count--;
+}
+
 bool event_dispatcher_register(QueueHandle_t queue, event_type_t type, event_subtype_t subtype) {
     xSemaphoreTake(subscription_mutex, portMAX_DELAY);
     
@@ -91,6 +110,23 @@ bool event_dispatcher_register(QueueHandle_t queue, event_type_t type, event_sub
     bool added = add_event_subscription(subtype_node, queue);
     xSemaphoreGive(subscription_mutex);
     return added;
+}
+
+bool event_dispatcher_unregister(QueueHandle_t queue, event_type_t type, uint16_t subtype) {
+    xSemaphoreTake(subscription_mutex, portMAX_DELAY);
+
+    event_type_subscription_t* node = find_type_subscriptions(type);
+    event_subtype_subscription_t* subtype_node = find_subtype_subscription(node, subtype);
+
+    if (!subtype_node) {
+        printf("[Dispatcher] Failed to get subtype subscription for type=%d subtype=%d\n", type, subtype);
+        xSemaphoreGive(subscription_mutex);
+        return true;
+    }
+
+    remove_event_subscription(subtype_node, queue);
+    xSemaphoreGive(subscription_mutex);
+    return true;
 }
 
 bool event_dispatcher_post(event_t* event) {
@@ -119,11 +155,12 @@ void event_dispatcher_task(void* params) {
             event_subtype_subscription_t* subtype_node = find_subtype_subscription(find_type_subscriptions(event->type), event->subtype);
             if (!subtype_node) {
                 printf("[Dispatcher] No subscriptions found for event type=%d subtype=%d\n", event->type, event->subtype);
-                xSemaphoreGive(dispatch_mutex);
+                free_event(event);
                 return;
             }
 
             for(int i = 0; i < subtype_node->queue_count; i++) {
+                event->reference_counter++;
                 if (xQueueSend(subtype_node->queues[i], &event, portMAX_DELAY) != pdPASS) {
                     printf("[Dispatcher] Failed to send event to queue %d for type=%d subtype=%d\n", i, event->type, event->subtype);
                 } 
@@ -133,6 +170,7 @@ void event_dispatcher_task(void* params) {
 }
 
 bool event_dispatcher_init(void) {
+    init_event_mutex();
     dispatcher_queue = xQueueCreate(DISPATCHER_QUEUE_LENGTH, sizeof(event_t*));
     if (!dispatcher_queue) {
         printf("[Dispatcher] Failed to create event dispatcher queue.\n");

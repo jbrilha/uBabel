@@ -1,5 +1,11 @@
 #include "event.h"
 
+static SemaphoreHandle_t event_mutex;
+
+void init_event_mutex() {
+    event_mutex = xSemaphoreCreateMutex();
+}
+
 event_t* create_event(event_type_t type, event_subtype_t subtype, void* payload, uint16_t payload_size) {
     event_t* event = malloc(sizeof(event_t));
     if (!event) {
@@ -16,17 +22,26 @@ event_t* create_event(event_type_t type, event_subtype_t subtype, void* payload,
     } else {
         event->payload = NULL;
     }
+
+    event->reference_counter = 0;
     
     return event;
 }
 
 void free_event(event_t* event) {
+    xSemaphoreTake(event_mutex, portMAX_DELAY);
+    
     if (event) {
-        if (event->payload) {
-            free(event->payload);
+        event->reference_counter--;
+        if(event->reference_counter <= 0) {
+            if (event->payload) {
+                free(event->payload);
+            }
+            free(event);
         }
-        free(event);
     }
+
+    xSemaphoreGive(event_mutex);
 }
 
 void print_event(const event_t* event) {

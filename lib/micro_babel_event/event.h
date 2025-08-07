@@ -32,6 +32,7 @@ typedef struct {
     event_subtype_t subtype;
     uint16_t payload_size; // Size of the payload in bytes
     void* payload; // Pointer to the payload data
+    uint8_t reference_counter; //Number of references for this event;
 } event_t;
 
 #ifdef __cplusplus
@@ -44,6 +45,7 @@ void print_event(const event_t* event);
 bool is_event_type(const event_t* event, event_type_t type);
 bool is_event_subtype(const event_t* event, event_subtype_t subtype);
 bool is_event_payload_empty(const event_t* event);
+void init_event_mutex();
 
 #ifdef __cplusplus
 }

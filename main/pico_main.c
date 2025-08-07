@@ -22,6 +22,7 @@
 #include "network_manager.h"
 #include "event_dispatcher.h"
 #include "pico_buttons.h"
+#include "proto_discovery.h"
 
 #include "tcp.h"
 #include "udp.h"
@@ -117,9 +118,7 @@ void scroll_task(__unused void *params) {
                 } else if(event->subtype == EVENT_SUBTYPE_NETWORK_DOWN) {
                     pico_scroll_scroll_text("Network DOWN", 255, 100);
                 }
-                if(event->payload != NULL)
-                    free(event->payload); // Free the payload memory
-                free(event);
+                free_event(event);
             }
         }
     }
@@ -162,7 +161,7 @@ void unicorn_task(__unused void *params) {
                 } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
                     button_y = !button_y;
                 }
-                free(event); // Free the event memory
+                free_event(event); // Free the event memory
             }
         } 
 
@@ -228,7 +227,7 @@ void unicorn_task(__unused void *params) {
 
 void main_task(__unused void *params) {
     event_dispatcher_init();
-    printf("Event dispatcher initialized\n");
+    proto_discovery_init();
 
     scroll_task_init();
     unicorn_task_init();

@@ -22,10 +22,12 @@ if(DEFINED BUILD_PICO)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/shared)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/common)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/protocols)
 
     add_subdirectory(lib)
     add_subdirectory(common)
     add_subdirectory(main)
+    add_subdirectory(protocols)
 else()
     add_compile_definitions(BUILD_ESP32=1)
 

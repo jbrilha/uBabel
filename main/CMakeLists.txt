@@ -23,6 +23,7 @@ if(DEFINED BUILD_PICO)
         pico_buttons
         micro_babel_network
         micro_babel_event
+        micro_babel_proto_discovery
         tcp
         udp
     )
