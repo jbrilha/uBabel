@@ -5,6 +5,7 @@
 #include "event_dispatcher.h"
 #include "network_events.h"
 #include "task.h"
+#include "lwip/igmp.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -113,9 +114,8 @@ static int initialize_udp_socket(char* local_ip) {
     mreq.imr_multiaddr.s_addr = ip4_addr_get_u32(ip_2_ip4(&group_ip));
 
     // Choose interface: default netif, or INADDR_ANY if you want lwIP to choose
-    if (netif_default) {
-        const ip4_addr_t* if_ip = netif_ip4_addr(netif_default);
-        mreq.imr_interface.s_addr = ip4_addr_get_u32(if_ip);
+    if (local_ip != NULL) {
+        mreq.imr_interface.s_addr = ip4_addr_get_u32(ip_2_ip4(&ip));
     } else {
         mreq.imr_interface.s_addr = htonl(INADDR_ANY);
     }
