@@ -1,0 +1,4 @@
+idf_component_register(SRCS "spi_lcd_touch.c" "lvgl_demo_ui.c"
+                        INCLUDE_DIRS "." "../../shared"
+                        REQUIRES micro_babel_event
+)
