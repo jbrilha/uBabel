@@ -471,7 +471,7 @@ void network_manager_task(void *params) {
             // Monitor link status check
             int curr_status = network_platform_link_status();
 
-            if (curr_status != 1 || !check_connectivity_via_ping_gateway()) {
+            if (curr_status != 1 || (!check_connectivity_via_ping_gateway() && !check_connectivity_via_dns())) {
                 printf("[EVENT] Wi-Fi link lost.\n");
 
                 network_event_t *evt = malloc(sizeof(network_event_t));
@@ -494,6 +494,7 @@ void network_manager_task(void *params) {
                     free(evt);
                 }
 
+                network_platform_disconnect_wifi();
                 connected = false;
                 // emit or handle evt here
                 printf("[EVENT] Disconnected from Wi-Fi.\n");

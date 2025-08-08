@@ -3,7 +3,10 @@
 #include <string.h>
 
 int load_network_config(network_config_t* config) {
-    config->wifi_list_size = 0;
+    config->wifi_list_size = 1;
+
+    strncpy(config->wifi_list[0].ssid, "TaRDIS-LAB", MAX_SSID_LEN);
+    strncpy(config->wifi_list[0].pass, "TaRDISTaRDIS", MAX_PASS_LEN);
 
     return config->wifi_list_size;
 }
