@@ -17,7 +17,7 @@
 #define EVENT_MESSAGE_DISCOVERY 304
 
 #define MAX_PROTOCOL_NAME_SIZE 38
-#define MAX_UDP_PACKET_SIZE 65535
+#define MAX_UDP_PACKET_SIZE 1024//65535
 
 typedef struct register_proto_info {
     char protocol_name[MAX_PROTOCOL_NAME_SIZE + 1]; //Null terminated protocol name
