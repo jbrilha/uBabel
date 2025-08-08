@@ -8,12 +8,13 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 #define DISCOVERY_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define DISCOVERY_UDP_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
-#define DISCOVERY_MULTICAST_ADDR "233.138.122.123"
-#define DISCOVERY_PORT 1025
+#define DISCOVERY_MULTICAST_ADDR "239.255.255.250"
+#define DISCOVERY_PORT 9100
 
 typedef struct discoverable_protocol {
   char protocol_name[MAX_PROTOCOL_NAME_SIZE + 1]; //Null terminated protocol name
@@ -83,8 +84,12 @@ static int initialize_udp_socket(char* local_ip) {
     bind_addr.sin_family = AF_INET;
     ip_addr_t ip;
     if(local_ip != NULL) {
-      ipaddr_aton(local_ip, &ip);
-      bind_addr.sin_addr.s_addr = ip.addr;
+     if (!ipaddr_aton(local_ip, &ip)) {
+            LOG_INFO(TAG, "invalid local_ip\n");
+            lwip_close(sock);
+            return -1;
+        }
+      bind_addr.sin_addr.s_addr = ip4_addr_get_u32(ip_2_ip4(&ip));
     } else {
       bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     }
@@ -97,15 +102,34 @@ static int initialize_udp_socket(char* local_ip) {
     }
 
     struct ip_mreq mreq;
-    ipaddr_aton(DISCOVERY_MULTICAST_ADDR, &ip);  
-    bind_addr.sin_addr.s_addr = ip.addr;   // Multicast group
-    mreq.imr_interface.s_addr = ip4_addr_get_u32(netif_ip4_addr(netif_default)); // Use default netif IP
-
-    if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0) {
-        perror("setsockopt IP_ADD_MEMBERSHIP");
-        close(sock);
+    memset(&mreq, 0, sizeof(mreq));
+    ip_addr_t group_ip;
+    
+    if (!ipaddr_aton(DISCOVERY_MULTICAST_ADDR, &group_ip)) {
+        LOG_INFO(TAG, "invalid multicast addr\n");
+        lwip_close(sock);
         return -1;
-    }   
+    }
+    mreq.imr_multiaddr.s_addr = ip4_addr_get_u32(ip_2_ip4(&group_ip));
+
+    // Choose interface: default netif, or INADDR_ANY if you want lwIP to choose
+    if (netif_default) {
+        const ip4_addr_t* if_ip = netif_ip4_addr(netif_default);
+        mreq.imr_interface.s_addr = ip4_addr_get_u32(if_ip);
+    } else {
+        mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    }
+
+
+    if (lwip_setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+                        &mreq, sizeof(mreq)) < 0) {
+        // Don't trust perror; print SO_ERROR instead:
+        int soerr = 0; socklen_t sl = sizeof(soerr);
+        lwip_getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr, &sl);
+        LOG_INFO(TAG, "IP_ADD_MEMBERSHIP failed, so_error=%d\n", soerr);
+        lwip_close(sock);
+        return -1;
+    } 
 
     return sock;
 }
@@ -114,9 +138,9 @@ static void udp_forwarder_task(void* params) {
     printf("[proto_discovery:] starting to receive multicast messages in IP: %s\n", (char*) params);
     
     //Start by cleaning up from a previous execution:
-    if(socket != 0) {
+    if(socket >= 0) {
       close(socket);
-      socket = 0;
+      socket = -1;
     }
 
     if(msg != NULL) {
@@ -125,6 +149,11 @@ static void udp_forwarder_task(void* params) {
     }
 
     socket = initialize_udp_socket((char*) params);
+
+    if(socket < 0) {
+      printf("Failed to open socker (value is %d)\n", socket);
+      vTaskDelete(NULL);
+    }
     socklen_t slen;
 
     while (true) {
@@ -135,10 +164,16 @@ static void udp_forwarder_task(void* params) {
         }
         slen = sizeof(msg->sender_addr);
         msg->messagelenght = lwip_recvfrom(socket, msg->buffer, MAX_UDP_PACKET_SIZE, 0,
-                            (struct sockaddr *)&(msg->sender_addr), &slen);
-        event_t* ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_DISCOVERY, msg, sizeof(msg));
-        ev->reference_counter++;
-        xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY);
+                            (struct sockaddr *) &(msg->sender_addr), &slen);
+        if(msg->messagelenght >= 0) {
+          event_t* ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_DISCOVERY, msg, sizeof(msg));
+          ev->reference_counter++;
+          xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY);
+        } else {
+          int e = errno;
+          printf("Recvfrom error: %d\n", e);
+          free(msg);
+        }
     }
 }
 
@@ -156,7 +191,15 @@ static void handle_network_down_event(event_t* ev) {
 }
 
 static void processDiscoveryMessage(event_t* ev) {
+    char ip_str[INET_ADDRSTRLEN];
 
+    // Convert IP to human-readable string
+    inet_ntop(AF_INET, &(((discovery_message_t*) ev->payload)->sender_addr.sin_addr), ip_str, sizeof(ip_str));
+
+    printf("Discovery message from %s:%d | Length: %u bytes\n",
+           ip_str,
+           ntohs(((discovery_message_t*) ev->payload)->sender_addr.sin_port),
+           (((discovery_message_t*)ev->payload)->messagelenght));
 }
 
 static void proto_discovery_task(void* params) {
@@ -194,6 +237,7 @@ static void proto_discovery_task(void* params) {
 }
 
 bool proto_discovery_init(void) {
+    socket = -1;
 
     // Initialize the discovery queue
     proto_discovery_queue = xQueueCreate(10, sizeof(event_t*));

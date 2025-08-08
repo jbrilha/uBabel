@@ -28,7 +28,7 @@ typedef struct register_proto_info {
 
 typedef struct discovery_message {
     struct sockaddr_in sender_addr;
-    uint16_t messagelenght;
+    int messagelenght;
     char buffer[MAX_UDP_PACKET_SIZE]; 
 } discovery_message_t;
 
