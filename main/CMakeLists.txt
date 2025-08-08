@@ -26,6 +26,7 @@ if(DEFINED BUILD_PICO)
         micro_babel_proto_discovery
         tcp
         udp
+        pico_touch_screen
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)

@@ -26,6 +26,7 @@
 
 #include "tcp.h"
 #include "udp.h"
+#include "pico_touch_screen.h"
 
 #include "pico_scroll_wrapper.h"
 #include "pico_unicorn_wrapper.h"
@@ -241,6 +242,9 @@ void main_task(__unused void *params) {
 
     xTaskCreate(pico_buttons_task, "buttons_task", configMINIMAL_STACK_SIZE, NULL,
                 WORKER_TASK_PRIORITY, NULL);
+
+    // xTaskCreate(pico_touch_screen_task, "touch_task", configMINIMAL_STACK_SIZE, NULL,
+    //             WORKER_TASK_PRIORITY, NULL);
 
     xTaskCreate(
         network_manager_task,   // Task function
