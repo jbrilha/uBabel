@@ -226,6 +226,7 @@ void unicorn_task(__unused void *params) {
 
 
 void main_task(__unused void *params) {
+    vTaskDelay(pdMS_TO_TICKS(10000)); //10 second delay to connect terminal
     event_dispatcher_init();
     proto_discovery_init();
 

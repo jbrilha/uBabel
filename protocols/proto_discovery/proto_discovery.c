@@ -3,9 +3,14 @@
 #include "udp.h"
 #include "event.h"
 #include "event_dispatcher.h"
+#include "network_events.h"
+#include "task.h"
 
 #include <string.h>
 #include <stdio.h>
+
+#define DISCOVERY_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
+#define DISCOVERY_UDP_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
 #define DISCOVERY_MULTICAST_ADDR "233.138.122.123"
 #define DISCOVERY_PORT 1025
@@ -20,7 +25,9 @@ typedef struct discoverable_protocol {
 
 static QueueHandle_t proto_discovery_queue;
 static discoverable_proto_t* registered_interest;
+
 static int socket;
+static discovery_message_t* msg = NULL;
 
 
 
@@ -75,8 +82,12 @@ static int initialize_udp_socket(char* local_ip) {
     memset(&bind_addr, 0, slen);
     bind_addr.sin_family = AF_INET;
     ip_addr_t ip;
-    ipaddr_aton(local_ip, &ip);
-    bind_addr.sin_addr.s_addr = ip.addr;
+    if(local_ip != NULL) {
+      ipaddr_aton(local_ip, &ip);
+      bind_addr.sin_addr.s_addr = ip.addr;
+    } else {
+      bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    }
     bind_addr.sin_port = htons(DISCOVERY_PORT);
 
     if (lwip_bind(sock, (struct sockaddr *)&bind_addr, slen) < 0) {
@@ -101,9 +112,19 @@ static int initialize_udp_socket(char* local_ip) {
 
 static void udp_forwarder_task(void* params) {
     printf("[proto_discovery:] starting to receive multicast messages in IP: %s\n", (char*) params);
-    socket = initialize_udp_socket((char*) params);
     
-    discovery_message_t* msg = NULL;
+    //Start by cleaning up from a previous execution:
+    if(socket != 0) {
+      close(socket);
+      socket = 0;
+    }
+
+    if(msg != NULL) {
+      free(msg);
+      msg = NULL;
+    }
+
+    socket = initialize_udp_socket((char*) params);
     socklen_t slen;
 
     while (true) {
@@ -122,7 +143,10 @@ static void udp_forwarder_task(void* params) {
 }
 
 static void handle_network_up_event(event_t * ev) {
-  xTaskCreate(udp_forwarder_task, "proto_discovery_udp", 1024, NULL, 2, NULL);
+  if(ev->payload != NULL && ev->payload_size > 0)
+    xTaskCreate(udp_forwarder_task, "proto_discovery_udp", DISCOVERY_UDP_TASK_STACK_SIZE, ((network_event_t*)ev->payload)->ip, 2, NULL);
+  else
+    xTaskCreate(udp_forwarder_task, "proto_discovery_udp", DISCOVERY_UDP_TASK_STACK_SIZE, NULL, 2, NULL);
 }
 
 static void handle_network_down_event(event_t* ev) {
@@ -206,6 +230,6 @@ bool proto_discovery_init(void) {
         event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN);
     }
 
-    xTaskCreate(proto_discovery_task, "proto_discovery_task", MAX_UDP_PACKET_SIZE + 1024, NULL, 2, NULL);
+    xTaskCreate(proto_discovery_task, "proto_discovery_task", DISCOVERY_TASK_STACK_SIZE, NULL, 2, NULL);
     printf("[proto_discovery] Initialized");
 }
