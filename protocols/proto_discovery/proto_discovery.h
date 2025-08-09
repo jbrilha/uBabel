@@ -19,13 +19,6 @@
 #define MAX_PROTOCOL_NAME_SIZE 38
 #define MAX_UDP_PACKET_SIZE 1024//65535
 
-typedef struct register_proto_info {
-    char protocol_name[MAX_PROTOCOL_NAME_SIZE + 1]; //Null terminated protocol name
-    uint32_t ip;
-    uint16_t port;
-    QueueHandle_t queue;
-} register_proto_info_t;
-
 typedef struct discovery_message {
     struct sockaddr_in sender_addr;
     int messagelenght;

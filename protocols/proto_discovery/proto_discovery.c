@@ -6,10 +6,14 @@
 #include "network_events.h"
 #include "task.h"
 #include "lwip/igmp.h"
+#include "lwip/inet.h"
+#include "lwip/ip_addr.h"
 
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+
+#include "discovery_parse.h"
 
 #define DISCOVERY_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define DISCOVERY_UDP_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
@@ -17,266 +21,514 @@
 #define DISCOVERY_MULTICAST_ADDR "239.255.255.250"
 #define DISCOVERY_PORT 9100
 
-typedef struct discoverable_protocol {
-  char protocol_name[MAX_PROTOCOL_NAME_SIZE + 1]; //Null terminated protocol name
-  uint32_t ip;
+#define TAG "proto_discovery"
+
+#define SUSPECT_NUMBER_OF_PERIODS 3
+#define FAILED_NUMBER_OF_PERIODS 6
+#define FORGET_NUMBER_OF_PERIODS 10
+
+#define DISCOVERY_SIGNATURE_SIZE 4
+#define DISCOVERY_SIGNATURE "mbma"
+#define UUID_SIZE 16
+
+typedef enum connection_status
+{
+  DISCONNECTED = 0,
+  CONNECTING = 1,
+  CONNECTED = 2,
+  SUSPECT = 3,
+  FAILED = 4,
+  DEAD = 5
+} connection_status_t;
+
+typedef enum device_type
+{
+  FULL_HOST = 0,
+  RASPBERRY = 1,
+  ZERO = 2,
+  PICO = 3,
+  ESP = 4,
+  UNKNOWN = 5
+} device_type_t;
+
+typedef struct participant_register
+{
+  uint8_t id[16]; // Storing an UUID
+  uint16_t ips;
+  ip4_addr_t *address;
+  ip4_addr_t *active_ip;
   uint16_t port;
-  QueueHandle_t queue;
-  struct discoverable_protocol* next;
-} discoverable_proto_t;
+  uint32_t announce_period;
+  uint32_t last_announce;
+  uint32_t next_timeout;
+  connection_status_t status;
+  device_type_t device;
+  int tcp_socket;
+  struct participant_register *next;
+} participant_register_t;
+
+static participant_register_t *detected_nodes;
 
 static QueueHandle_t proto_discovery_queue;
-static discoverable_proto_t* registered_interest;
-
 static int socket;
-static discovery_message_t* msg = NULL;
+static discovery_message_t *msg = NULL;
 
-
-
-static bool proto_discovery_register_interest(char* proto_name, uint32_t ip, uint16_t port, QueueHandle_t queue) {
-    discoverable_proto_t* newRegister = malloc(sizeof(discoverable_proto_t));
-    if(newRegister == NULL) {
-      return false;
-    }
-    
-    memset(newRegister->protocol_name, 0, MAX_PROTOCOL_NAME_SIZE+1);
-    strncpy(newRegister->protocol_name, proto_name, MAX_PROTOCOL_NAME_SIZE);
-    newRegister->ip = ip;
-    newRegister->port = port;
-    newRegister->queue = queue;
-    newRegister->next = registered_interest;
-    registered_interest = newRegister;
-
-
-    return true;
+static inline bool discovery_check_signature(const uint8_t *buf)
+{
+  return memcmp(buf, DISCOVERY_SIGNATURE, DISCOVERY_SIGNATURE_SIZE) == 0;
 }
 
-static bool proto_discovery_unregister_interest(char* proto_name, uint32_t ip, uint16_t port, QueueHandle_t queue) {  
-  discoverable_proto_t** current = &registered_interest;
-  while(*current != NULL) {
-    if(
-      strcmp((*current)->protocol_name, proto_name) == 0 &&
-      (*current)->ip == ip && (*current)->port == port &&
-      (*current)->queue == queue
-     ) {
-      discoverable_proto_t* toRelease = *current;
-      *current = (*current)->next;
-      free(toRelease);
-      return true;
-     } else 
-      current = &((*current)->next);
+// Returns milliseconds since scheduler start
+static inline uint32_t now_ms(void)
+{
+  return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+}
+
+static const char *uuid_to_string(uint8_t uuid[16])
+{
+  static char out[16 * 2 + 5];
+
+  sprintf(out,
+          "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+          uuid[0], uuid[1], uuid[2], uuid[3],
+          uuid[4], uuid[5],
+          uuid[6], uuid[7],
+          uuid[8], uuid[9],
+          uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
+
+  return out;
+}
+
+const char *ipv4_to_str(const ip4_addr_t *ip)
+{
+  static char buf[16]; // "255.255.255.255" + '\0'
+  snprintf(buf, sizeof(buf), "%u.%u.%u.%u",
+           ip4_addr1(ip),
+           ip4_addr2(ip),
+           ip4_addr3(ip),
+           ip4_addr4(ip));
+  return buf; // WARNING: Not thread-safe
+}
+
+static participant_register_t *find_participant_by_id(void *buf_ptr)
+{
+  participant_register_t *current = detected_nodes;
+  while (current != NULL)
+  {
+    if (memcpy(current->id, buf_ptr, UUID_SIZE) == 0)
+    {
+      return current;
+    }
+    current = current->next;
   }
-  return false;
+  return NULL;
 }
 
+static void update_participant_info(participant_register_t *p, discovery_msg_t *msg)
+{
+  // TODO: Maybe check if the IP addreses have chenged
+  p->last_announce = now_ms();
+}
 
-static int initialize_udp_socket(char* local_ip) {
-    int sock;
-    struct sockaddr_in bind_addr;
-    socklen_t slen = sizeof(bind_addr);
+static participant_register_t *register_new_participant_info(discovery_msg_t *msg)
+{
+  participant_register_t *participant = (participant_register_t*) malloc(sizeof(participant_register_t));
+  if (participant == NULL)
+  {
+    return NULL;
+  }
 
-    sock = lwip_socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) {
-        LOG_INFO(TAG, "failed to create UDP socket\n");
-        return -1;
+  participant->address = (ip4_addr_t*) malloc(sizeof(ip4_addr_t) * msg->addr_count);
+  if (participant->address == NULL)
+  {
+    free(participant);
+    return NULL;
+  }
+
+  memcpy(participant->id, msg->uuid, UUID_SIZE);
+  participant->ips = msg->addr_count;
+  memcpy(participant->address, msg->addrs, msg->addr_count);
+  participant->active_ip = NULL;
+  participant->port = msg->unicast_port;
+  participant->announce_period = (uint32_t)msg->announce_period;
+  participant->last_announce = now_ms();
+  participant->next_timeout = participant->last_announce + participant->announce_period * SUSPECT_NUMBER_OF_PERIODS;
+  participant->status = DISCONNECTED;
+  participant->device = UNKNOWN;
+  participant->tcp_socket = lwip_socket(AF_INET, SOCK_STREAM, 0);
+  participant->next = detected_nodes;
+
+  detected_nodes = participant;
+  return participant;
+}
+
+static int initialize_udp_socket()
+{
+  int sock;
+  struct sockaddr_in bind_addr;
+  socklen_t slen = sizeof(bind_addr);
+
+  sock = lwip_socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock < 0)
+  {
+    LOG_INFO(TAG, "failed to create UDP socket\n");
+    return -1;
+  }
+
+  memset(&bind_addr, 0, slen);
+  bind_addr.sin_family = AF_INET;
+  bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  bind_addr.sin_port = htons(DISCOVERY_PORT);
+
+  if (lwip_bind(sock, (struct sockaddr *)&bind_addr, slen) < 0)
+  {
+    LOG_INFO(TAG, "failed to bind UDP socket\n");
+    lwip_close(sock);
+    return -1;
+  }
+
+  // Allow address reuse (important for multicast)
+  int reuse = 1;
+  if (lwip_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
+  {
+    LOG_INFO(TAG, "Failed to set SO_REUSEADDR\n");
+  }
+
+  // Set multicast TTL
+  int ttl = 1;
+  if (lwip_setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) < 0)
+  {
+    LOG_INFO(TAG, "Failed to set multicast TTL\n");
+  }
+
+  struct ip_mreq mreq;
+  memset(&mreq, 0, sizeof(mreq));
+  ip_addr_t group_ip;
+
+  if (!ipaddr_aton(DISCOVERY_MULTICAST_ADDR, &group_ip))
+  {
+    LOG_INFO(TAG, "invalid multicast addr\n");
+    lwip_close(sock);
+    return -1;
+  }
+
+  mreq.imr_multiaddr.s_addr = ip4_addr_get_u32(ip_2_ip4(&group_ip));
+  mreq.imr_interface.s_addr = INADDR_ANY; // Let system choose
+
+  if (lwip_setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+                      &mreq, sizeof(mreq)) < 0)
+  {
+    // Don't trust perror; print SO_ERROR instead:
+    int soerr = 0;
+    socklen_t sl = sizeof(soerr);
+    lwip_getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr, &sl);
+    LOG_INFO(TAG, "IP_ADD_MEMBERSHIP failed, so_error=%d\n", soerr);
+    lwip_close(sock);
+    return -1;
+  }
+  else
+  {
+    LOG_INFO(TAG, "Joined the multicast group using the lwop_getsockopt");
+  }
+
+  return sock;
+}
+
+static void socket_manager_task(void *params)
+{
+  printf("[proto_discovery:] starting to receive multicast messages in IP: %s\n", (char *)params);
+
+  // Start by cleaning up from a previous execution:
+  if (socket >= 0)
+  {
+    lwip_close(socket);
+    socket = -1;
+  }
+
+  if (msg != NULL)
+  {
+    free(msg);
+    msg = NULL;
+  }
+
+  socket = initialize_udp_socket((char *)params);
+
+  if (socket < 0)
+  {
+    printf("Failed to open socker (value is %d)\n", socket);
+    vTaskDelete(NULL);
+  }
+  socklen_t slen;
+
+  while (true)
+  {
+    uint32_t now = now_ms();
+    uint32_t next_deadline = UINT32_MAX;
+    int highest_socket = socket;
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    participant_register_t *current = detected_nodes;
+    while (current != NULL)
+    {
+      if (current->status == CONNECTED)
+      {
+        FD_SET(current->tcp_socket, &rfds);
+        if (current->tcp_socket > highest_socket)
+          highest_socket = current->tcp_socket;
+      }
+      if (current->status == FAILED)
+        next_deadline = MIN(next_deadline, now + (current->announce_period * FORGET_NUMBER_OF_PERIODS - (now - current->last_announce)));
+      if (current->status == SUSPECT)
+        next_deadline = MIN(next_deadline, now + (current->announce_period * FAILED_NUMBER_OF_PERIODS - (now - current->last_announce)));
+      if (current->status != DEAD)
+        next_deadline = MIN(next_deadline, now + (current->announce_period * SUSPECT_NUMBER_OF_PERIODS - (now - current->last_announce)));
+      current = current->next;
     }
 
-    memset(&bind_addr, 0, slen);
-    bind_addr.sin_family = AF_INET;
-    ip_addr_t ip;
-    if(local_ip != NULL) {
-     if (!ipaddr_aton(local_ip, &ip)) {
-            LOG_INFO(TAG, "invalid local_ip\n");
-            lwip_close(sock);
-            return -1;
+    FD_SET(socket, &rfds);
+
+    struct timeval tv = {.tv_sec = next_deadline / 1000, .tv_usec = ((next_deadline - (next_deadline / 1000)) * 1000) * 1000};
+    highest_socket++;
+
+    int n = lwip_select(highest_socket, &rfds, NULL, NULL, &tv);
+
+    if (n > 0)
+    {
+      //Check TCP connections
+      current = detected_nodes;
+      while(current != NULL) {
+        if(current->status == CONNECTED && FD_ISSET(current->tcp_socket, &rfds)) {
+          //Data was received in this RCP connection
+          
+          uint8_t buffer[1024];
+          //read message lenght and then the buffer maybe in a function
+          read(current->tcp_socket, buffer, sizeof(buffer));
         }
-      bind_addr.sin_addr.s_addr = ip4_addr_get_u32(ip_2_ip4(&ip));
-    } else {
-      bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    }
-    bind_addr.sin_port = htons(DISCOVERY_PORT);
+      }
 
-    if (lwip_bind(sock, (struct sockaddr *)&bind_addr, slen) < 0) {
-        LOG_INFO(TAG, "failed to bind UDP socket\n");
-        lwip_close(sock);
-        return -1;
-    }
-
-    struct ip_mreq mreq;
-    memset(&mreq, 0, sizeof(mreq));
-    ip_addr_t group_ip;
-    
-    if (!ipaddr_aton(DISCOVERY_MULTICAST_ADDR, &group_ip)) {
-        LOG_INFO(TAG, "invalid multicast addr\n");
-        lwip_close(sock);
-        return -1;
-    }
-    mreq.imr_multiaddr.s_addr = ip4_addr_get_u32(ip_2_ip4(&group_ip));
-
-    // Choose interface: default netif, or INADDR_ANY if you want lwIP to choose
-    if (local_ip != NULL) {
-        mreq.imr_interface.s_addr = ip4_addr_get_u32(ip_2_ip4(&ip));
-    } else {
-        mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-    }
-
-
-    if (lwip_setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-                        &mreq, sizeof(mreq)) < 0) {
-        // Don't trust perror; print SO_ERROR instead:
-        int soerr = 0; socklen_t sl = sizeof(soerr);
-        lwip_getsockopt(sock, SOL_SOCKET, SO_ERROR, &soerr, &sl);
-        LOG_INFO(TAG, "IP_ADD_MEMBERSHIP failed, so_error=%d\n", soerr);
-        lwip_close(sock);
-        return -1;
-    } 
-
-    return sock;
-}
-
-static void udp_forwarder_task(void* params) {
-    printf("[proto_discovery:] starting to receive multicast messages in IP: %s\n", (char*) params);
-    
-    //Start by cleaning up from a previous execution:
-    if(socket >= 0) {
-      close(socket);
-      socket = -1;
-    }
-
-    if(msg != NULL) {
-      free(msg);
-      msg = NULL;
-    }
-
-    socket = initialize_udp_socket((char*) params);
-
-    if(socket < 0) {
-      printf("Failed to open socker (value is %d)\n", socket);
-      vTaskDelete(NULL);
-    }
-    socklen_t slen;
-
-    while (true) {
+      //Check the UDP Socket
+      if (FD_ISSET(socket, &rfds))
+      {
+        //UDP SOCKET RECEIVED SOMETHING - Potencially a multicast announcement.
         msg = malloc(sizeof(discovery_message_t));
-        if(msg == NULL) {
+        if (msg == NULL)
+        {
           printf("[proto_discovery:] Could not allocate memory for a message buffer.");
           vTaskDelete(NULL);
         }
         slen = sizeof(msg->sender_addr);
         msg->messagelenght = lwip_recvfrom(socket, msg->buffer, MAX_UDP_PACKET_SIZE, 0,
-                            (struct sockaddr *) &(msg->sender_addr), &slen);
-        if(msg->messagelenght >= 0) {
-          event_t* ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_DISCOVERY, msg, sizeof(msg));
+                                           (struct sockaddr *)&(msg->sender_addr), &slen);
+        if (msg->messagelenght >= 0)
+        {
+          event_t *ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_DISCOVERY, msg, sizeof(discovery_message_t));
           ev->reference_counter++;
           xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY);
-        } else {
+        }
+        else
+        {
           int e = errno;
           printf("Recvfrom error: %d\n", e);
           free(msg);
         }
+      }
     }
+
+    //Now perform mainteance on the several discovered devices
+    current = detected_nodes;
+    while(current != NULL) {
+      switch(current->status) {
+        case DISCONNECTED:
+          if(current->ips > 0) {
+            current->active_ip = current->address;
+
+            struct sockaddr_in server_addr;
+            memset(&server_addr, 0, sizeof(server_addr));
+            server_addr.sin_family = AF_INET;
+            server_addr.sin_port = htons(current->port);
+            server_addr.sin_addr.s_addr = ip4_addr_get_u32(current->active_ip);
+
+            LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+            if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+                LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+            } else {
+                current->status = CONNECTED;
+            }
+          } else {
+            current->status = DEAD;
+          }
+        break;
+        case CONNECTING:
+          if(current->active_ip == NULL) {
+              current->active_ip = current->address;
+            } else if(current->active_ip == (current->address + (current->ips-1))) {
+              current->active_ip = current->address;
+            } else {
+              current->active_ip++;
+            }
+
+            struct sockaddr_in server_addr;
+            memset(&server_addr, 0, sizeof(server_addr));
+            server_addr.sin_family = AF_INET;
+            server_addr.sin_port = htons(current->port);
+            server_addr.sin_addr.s_addr = ip4_addr_get_u32(current->active_ip);
+
+            LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+            if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+                LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+            } else {
+                current->status = CONNECTED;
+            }
+        break;
+        case CONNECTED:
+
+        break;
+        case SUSPECT:
+
+        break;
+        case FAILED:
+
+        break;
+        case DEAD:
+        default:
+          //Nothing to be done here...
+        break;
+      }
+      current = current->next;
+    }
+  }
 }
 
-static void handle_network_up_event(event_t * ev) {
-  if(ev->payload != NULL && ev->payload_size > 0)
-    xTaskCreate(udp_forwarder_task, "proto_discovery_udp", DISCOVERY_UDP_TASK_STACK_SIZE, ((network_event_t*)ev->payload)->ip, 2, NULL);
+static void handle_network_up_event(event_t *ev)
+{
+  if (ev->payload != NULL && ev->payload_size > 0)
+    xTaskCreate(socket_manager_task, "proto_discovery_udp", DISCOVERY_UDP_TASK_STACK_SIZE, ((network_event_t *)ev->payload)->ip, 2, NULL);
   else
-    xTaskCreate(udp_forwarder_task, "proto_discovery_udp", DISCOVERY_UDP_TASK_STACK_SIZE, NULL, 2, NULL);
+    xTaskCreate(socket_manager_task, "proto_discovery_udp", DISCOVERY_UDP_TASK_STACK_SIZE, NULL, 2, NULL);
 }
 
-static void handle_network_down_event(event_t* ev) {
+static void handle_network_down_event(event_t *ev)
+{
   TaskHandle_t udpTask = xTaskGetHandle("proto_discovery_udp");
-  if(udpTask != NULL)
+  if (udpTask != NULL)
     vTaskDelete(udpTask);
 }
 
-static void processDiscoveryMessage(event_t* ev) {
-    char ip_str[INET_ADDRSTRLEN];
+static void processDiscoveryMessage(event_t *ev)
+{
+  char ip_str[INET_ADDRSTRLEN];
 
-    // Convert IP to human-readable string
-    inet_ntop(AF_INET, &(((discovery_message_t*) ev->payload)->sender_addr.sin_addr), ip_str, sizeof(ip_str));
+  // Convert IP to human-readable string
+  inet_ntop(AF_INET, &(((discovery_message_t *)ev->payload)->sender_addr.sin_addr), ip_str, sizeof(ip_str));
 
-    printf("Discovery message from %s:%d | Length: %u bytes\n",
-           ip_str,
-           ntohs(((discovery_message_t*) ev->payload)->sender_addr.sin_port),
-           (((discovery_message_t*)ev->payload)->messagelenght));
+  printf("Message from %s:%d | Length: %u bytes\n",
+         ip_str,
+         ntohs(((discovery_message_t *)ev->payload)->sender_addr.sin_port),
+         (((discovery_message_t *)ev->payload)->messagelenght));
+
+  if (((discovery_message_t *)ev->payload)->messagelenght > 0)
+  {
+    void *buf_ptr = ((discovery_message_t *)ev->payload)->buffer;
+    short buf_remaining = ((discovery_message_t *)ev->payload)->messagelenght;
+
+    discovery_msg_t msg;
+
+    LOG_INFO(TAG, "Going to parse a message with %d bytes", buf_remaining);
+
+    if (parse_discovery_message(buf_ptr, buf_remaining, &msg))
+    {
+      LOG_INFO(TAG, "The message is a propoer multicast annoucement: %s", discovery_check_signature(msg.sig) ? "true" : "false");
+      LOG_INFO(TAG, "Received announcement from %s", uuid_to_string(msg.uuid));
+      LOG_INFO(TAG, "Number of networks: %d", msg.addr_count);
+      for (int i = 0; i < msg.addr_count; i++)
+      {
+        LOG_INFO(TAG, "IP %d: %s", i, ipv4_to_str(&msg.addrs[i]));
+      }
+      LOG_INFO(TAG, "Port value: %d", msg.unicast_port);
+      LOG_INFO(TAG, "Periodicity in announcementes: %d\n", msg.announce_period);
+
+      participant_register_t *p = find_participant_by_id(msg.uuid);
+
+      if (p == NULL)
+      {
+        p = register_new_participant_info(&msg);
+      }
+      else
+      {
+        update_participant_info(p, &msg);
+      }
+    }
+    else
+    {
+      LOG_INFO(TAG, "Failed to parse the message.");
+    }
+  }
+  else
+  {
+    LOG_INFO(TAG, "Received message did not had the correct initial signature.");
+  }
 }
 
-static void proto_discovery_task(void* params) {
-    event_t* event;
+static void proto_discovery_task(void *params)
+{
+  event_t *event;
 
-    while (true) {
-        if (xQueueReceive(proto_discovery_queue, &event, portMAX_DELAY) == pdPASS) {
-            if(event->type == EVENT_TYPE_NOTIFICATION) {
-              if(event->subtype == EVENT_SUBTYPE_NETWORK_UP) {
-                handle_network_up_event(event);
-              } else if (event->subtype == EVENT_SUBTYPE_NETWORK_DOWN) {
-                handle_network_down_event(event);
-              }
-            } else if (event->type == EVENT_TYPE_REQUEST) {
-              if(event->subtype == EVENT_REQUEST_DISCOVERY_REGISTER) {
-                if(event->payload_size > 0 && event->payload != NULL) {
-                  register_proto_info_t* info = (register_proto_info_t*) event->payload;
-                  proto_discovery_register_interest(info->protocol_name, info->ip, info->port, info->queue);
-                }
-              } else if(event->subtype == EVENT_REQUEST_DISCOVERY_UNREGISTER) {
-                if(event->payload_size > 0 && event->payload != NULL) {
-                  register_proto_info_t* info = (register_proto_info_t*) event->payload;
-                  proto_discovery_unregister_interest(info->protocol_name, info->ip, info->port, info->queue);
-                }
-              }
-            } else if (event->type == EVENT_TYPE_MESSAGE && event->subtype == EVENT_MESSAGE_DISCOVERY) {
-                processDiscoveryMessage(event);
-                free_event(event);
-            }
+  while (true)
+  {
+    if (xQueueReceive(proto_discovery_queue, &event, portMAX_DELAY) == pdPASS)
+    {
+      if (event->type == EVENT_TYPE_NOTIFICATION)
+      {
+        if (event->subtype == EVENT_SUBTYPE_NETWORK_UP)
+        {
+          handle_network_up_event(event);
         }
-
-        free_event(event);
-        event = NULL;
+        else if (event->subtype == EVENT_SUBTYPE_NETWORK_DOWN)
+        {
+          handle_network_down_event(event);
+        }
+      }
+      else if (event->type == EVENT_TYPE_MESSAGE && event->subtype == EVENT_MESSAGE_DISCOVERY)
+      {
+        processDiscoveryMessage(event);
+      }
     }
+
+    free_event(event);
+    event = NULL;
+  }
 }
 
-bool proto_discovery_init(void) {
-    socket = -1;
+bool proto_discovery_init(void)
+{
+  socket = -1;
 
-    // Initialize the discovery queue
-    proto_discovery_queue = xQueueCreate(10, sizeof(event_t*));
+  // Initialize the discovery queue
+  proto_discovery_queue = xQueueCreate(10, sizeof(event_t *));
 
-    if (!proto_discovery_queue) {
-        printf("[proto_discovery] Failed to create discovery queue.\n");
-        return false;
-    } 
+  if (!proto_discovery_queue)
+  {
+    printf("[proto_discovery] Failed to create discovery queue.\n");
+    return false;
+  }
 
-    // Initialize the registered interest linked list
-    registered_interest = NULL;
+  // Initialize the registered interest linked list
+  detected_nodes = NULL;
 
-    // Register the discovery task with the event dispatcher
-    if (!event_dispatcher_register(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_REGISTER)) {
-        printf("[proto_discovery] Failed to register discovery task with event dispatcher.\n");
-        return false;
-    }
-    if (!event_dispatcher_register(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_UNREGISTER)) {
-        printf("[proto_discovery] Failed to register discovery task with event dispatcher.\n");
-        event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_REGISTER);
-        return false;
-    }
+  if (!event_dispatcher_register(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_UP))
+  {
+    printf("[proto_discovery] Failed to register discovery task with event dispatcher.\n");
+    return false;
+  }
 
-    if(!event_dispatcher_register(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_UP)) {
-        printf("[proto_discovery] Failed to register discovery task with event dispatcher.\n");
-        event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_REGISTER);
-        event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_UNREGISTER);
-        return false;
-    }
+  if (!event_dispatcher_register(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN))
+  {
+    printf("[proto_discovery] Failed to register discovery task with event dispatcher.\n");
+    event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN);
+    return false;
+  }
 
-    if(!event_dispatcher_register(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN)) {
-        printf("[proto_discovery] Failed to register discovery task with event dispatcher.\n");
-        event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_REGISTER);
-        event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_UNREGISTER);
-        event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN);
-        return false;
-    }
-
-    xTaskCreate(proto_discovery_task, "proto_discovery_task", DISCOVERY_TASK_STACK_SIZE, NULL, 2, NULL);
-    printf("[proto_discovery] Initialized");
-    return true;
+  xTaskCreate(proto_discovery_task, "proto_discovery_task", DISCOVERY_TASK_STACK_SIZE, NULL, 2, NULL);
+  printf("[proto_discovery] Initialized");
+  return true;
 }

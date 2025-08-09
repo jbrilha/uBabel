@@ -2,6 +2,7 @@ add_library(micro_babel_proto_discovery INTERFACE)
 
 target_sources(micro_babel_proto_discovery INTERFACE
   ${CMAKE_CURRENT_LIST_DIR}/proto_discovery.c
+  ${CMAKE_CURRENT_LIST_DIR}/discovery_parse.c
 )
 
 target_include_directories(micro_babel_proto_discovery INTERFACE ${CMAKE_CURRENT_LIST_DIR})
