@@ -5,6 +5,9 @@ all: pico esp32
 PICO_BUILD_DIR := build_pico
 ESP32_BUILD_DIR := build_esp32
 
+all-esp32: clean-esp32 esp32 flash-esp32 monitor-esp32
+all-pico: clean-pico pico flash-pico
+
 pico:
 	@echo "Building for Pico..."
 	@mkdir -p $(PICO_BUILD_DIR)

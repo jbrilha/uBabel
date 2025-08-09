@@ -27,6 +27,7 @@ if(DEFINED BUILD_PICO)
         tcp
         udp
         pico_touch_screen
+        mem_check
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)

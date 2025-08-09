@@ -27,6 +27,7 @@
 #include "tcp.h"
 #include "udp.h"
 #include "pico_touch_screen.h"
+#include "mem_check.h"
 
 #include "pico_scroll_wrapper.h"
 #include "pico_unicorn_wrapper.h"
@@ -228,6 +229,16 @@ void unicorn_task(__unused void *params) {
 
 void main_task(__unused void *params) {
     vTaskDelay(pdMS_TO_TICKS(10000)); //10 second delay to connect terminal
+
+    xTaskCreate(
+        mem_check_task,         // Task function
+        "mem_check",            // Task name
+        4096,                   // Stack size in words
+        NULL,                   // Task parameters
+        5,                      // Priority
+        NULL                    // Task handle
+    );
+
     event_dispatcher_init();
     proto_discovery_init();
 
