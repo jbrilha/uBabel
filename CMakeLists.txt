@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD 17)
 if(DEFINED BUILD_PICO)
     add_compile_definitions(BUILD_PICO=1)
 
-    set(PICO_BOARD pico_w)
+    set(PICO_BOARD pico2_w)
 
     include(pico_sdk_import.cmake)
     include(FreeRTOS_Kernel_import.cmake)

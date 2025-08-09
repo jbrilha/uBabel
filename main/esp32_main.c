@@ -8,6 +8,7 @@
 #include "esp_wifi_types_generic.h"
 #include "nvs_flash.h"
 #include "spi_lcd_touch.h"
+#include "mem_check.h"
 #include "tcp.h"
 #include "udp.h"
 
@@ -88,9 +89,18 @@ void app_main(void) {
     //     1,                      // Priority
     //     NULL                    // Task handle
     // );
+    // xTaskCreate(
+    //     lcd_touch_task,   // Task function
+    //     "lcd_task",       // Task name
+    //     4096,                   // Stack size in words
+    //     NULL,                   // Task parameters
+    //     1,                      // Priority
+    //     NULL                    // Task handle
+    // );
+
     xTaskCreate(
-        lcd_touch_task,   // Task function
-        "lcd_task",       // Task name
+        mem_check_task,   // Task function
+        "mem_check_task",       // Task name
         4096,                   // Stack size in words
         NULL,                   // Task parameters
         1,                      // Priority
