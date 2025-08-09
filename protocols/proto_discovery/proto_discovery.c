@@ -35,7 +35,7 @@ static discovery_message_t* msg = NULL;
 
 static bool proto_discovery_register_interest(char* proto_name, uint32_t ip, uint16_t port, QueueHandle_t queue) {
     discoverable_proto_t* newRegister = malloc(sizeof(discoverable_proto_t));
-    if(newRegister = NULL) {
+    if(newRegister == NULL) {
       return false;
     }
     
@@ -265,6 +265,7 @@ bool proto_discovery_init(void) {
         printf("[proto_discovery] Failed to register discovery task with event dispatcher.\n");
         event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_REGISTER);
         event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_UNREGISTER);
+        return false;
     }
 
     if(!event_dispatcher_register(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN)) {
@@ -272,8 +273,10 @@ bool proto_discovery_init(void) {
         event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_REGISTER);
         event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_REQUEST, EVENT_REQUEST_DISCOVERY_UNREGISTER);
         event_dispatcher_unregister(proto_discovery_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN);
+        return false;
     }
 
     xTaskCreate(proto_discovery_task, "proto_discovery_task", DISCOVERY_TASK_STACK_SIZE, NULL, 2, NULL);
     printf("[proto_discovery] Initialized");
+    return true;
 }
