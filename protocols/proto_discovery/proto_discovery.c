@@ -64,6 +64,7 @@ typedef struct participant_register
   connection_status_t status;
   device_type_t device;
   int tcp_socket;
+  bool connected;
   struct participant_register *next;
 } participant_register_t;
 
@@ -72,6 +73,30 @@ static participant_register_t *detected_nodes;
 static QueueHandle_t proto_discovery_queue;
 static int socket;
 static discovery_message_t *msg = NULL;
+
+
+static int setup_tcp_socket() {
+  int socket = lwip_socket(AF_INET, SOCK_STREAM, 0);
+  if (socket >= 0)
+  {
+    // Enable keepalive
+    int keepalive = 1;
+    if (lwip_setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0)
+    {
+      LOG_INFO(TAG, "Failed to set SO_KEEPALIVE");
+    }
+
+    // Optional: fine-tune keepalive behavior
+    int idle = 5;  // idle time before sending first keepalive probe (seconds)
+    int intvl = 5; // interval between probes (seconds)
+    int cnt = 3;   // number of failed probes before considering dead
+
+    lwip_setsockopt(socket, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+    lwip_setsockopt(socket, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
+    lwip_setsockopt(socket, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));
+  }
+  return socket;
+}
 
 static inline bool discovery_check_signature(const uint8_t *buf)
 {
@@ -128,6 +153,14 @@ static void update_participant_info(participant_register_t *p, discovery_msg_t *
 {
   // TODO: Maybe check if the IP addreses have chenged
   p->last_announce = now_ms();
+  if(p->status != CONNECTED && p->status != CONNECTING && p->status != DISCONNECTED) {
+    if(p->connected) {
+      p->status = CONNECTED;
+    } else {
+      p->status = DISCONNECTED;
+      p->active_ip = NULL;
+    }
+  }
 }
 
 static participant_register_t *register_new_participant_info(discovery_msg_t *msg)
@@ -155,29 +188,27 @@ static participant_register_t *register_new_participant_info(discovery_msg_t *ms
   participant->next_timeout = participant->last_announce + participant->announce_period * SUSPECT_NUMBER_OF_PERIODS;
   participant->status = DISCONNECTED;
   participant->device = UNKNOWN;
-  participant->tcp_socket = lwip_socket(AF_INET, SOCK_STREAM, 0);
-  if (participant->tcp_socket >= 0)
-  {
-    // Enable keepalive
-    int keepalive = 1;
-    if (lwip_setsockopt(participant->tcp_socket, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0)
-    {
-      LOG_INFO(TAG, "Failed to set SO_KEEPALIVE");
-    }
-
-    // Optional: fine-tune keepalive behavior
-    int idle = 5;  // idle time before sending first keepalive probe (seconds)
-    int intvl = 5; // interval between probes (seconds)
-    int cnt = 3;   // number of failed probes before considering dead
-
-    lwip_setsockopt(participant->tcp_socket, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
-    lwip_setsockopt(participant->tcp_socket, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
-    lwip_setsockopt(participant->tcp_socket, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));
-  }
+  participant->tcp_socket = setup_tcp_socket();
+  participant->connected = false;
   participant->next = detected_nodes;
 
   detected_nodes = participant;
   return participant;
+}
+
+static void remove_participan_info(participant_register_t* target) {
+  participant_register_t** container = &detected_nodes;
+
+  while(*container != NULL) {
+    if(*container == target) {
+      *container = (*container)->next;
+      if(target->address != NULL)
+        free(target->address);
+      
+      return;
+    }
+    container = &((*container)->next);
+  }
 }
 
 static int initialize_udp_socket()
@@ -191,16 +222,6 @@ static int initialize_udp_socket()
   {
     LOG_INFO(TAG, "failed to create UDP socket\n");
     return -1;
-  }
-
-  // Allow address reuse (important for multicast)
-  int reuse = 1;
-  if (lwip_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-#if LWIP_ERRNO
-    LOG_INFO(TAG, "SO_REUSEADDR not supported or failed (errno=%d). Continuing.\n", errno);
-#else
-    LOG_INFO(TAG, "SO_REUSEADDR not supported. Continuing.\n");
-#endif
   }
 
   memset(&bind_addr, 0, slen);
@@ -279,6 +300,84 @@ static int initialize_udp_socket()
   return sock;
 }
 
+static bool receive_from_tcp(participant_register_t *participant, uint8_t *ptr, uint16_t *to_receive)
+{
+  int r = 0;
+
+  while (*to_receive > 0)
+  {
+    r = lwip_recv(participant->tcp_socket, ptr, *to_receive, MSG_DONTWAIT);
+    if (r == 0)
+    {
+      // Peer performed an orderly shutdown (FIN received)
+      LOG_INFO(TAG, "Socket %d closed by peer\n", participant->tcp_socket);
+      participant->status = DISCONNECTED;
+      participant->active_ip = NULL;
+      lwip_close(participant->tcp_socket);
+      participant->tcp_socket = setup_tcp_socket();
+      participant->connected = false;
+      return false;
+    }
+    else if (r < 0)
+    {
+      if (errno != EWOULDBLOCK && errno != EAGAIN)
+      {
+        // Real error
+        LOG_INFO(TAG, "Socket %d error %d\n", participant->tcp_socket, errno);
+        participant->status = DISCONNECTED;
+        participant->active_ip = NULL;
+        lwip_close(participant->tcp_socket);
+        participant->tcp_socket = setup_tcp_socket();
+        participant->connected = false;
+        return false;
+      }
+    }
+    else
+    {
+      *to_receive -= r;
+      ptr+=r;
+    }
+  }
+
+  return true;
+}
+
+static void handle_tcp_client(participant_register_t *participant)
+{
+  uint16_t to_receive = 2;
+  uint16_t msg_size = 0;
+  uint16_t msg_code = 0;
+  uint8_t* buffer;
+  if(receive_from_tcp(participant, (uint8_t*) &msg_size, &to_receive)) {
+    LOG_INFO(TAG, "Received message with a total of %d bytes", msg_size);
+    to_receive = 2;
+    if(msg_size >= 2 && receive_from_tcp(participant, (uint8_t*) &msg_code, &to_receive)) {
+      LOG_INFO(TAG, "Received message with identifier: %d", msg_code);
+      msg_size -= 2;
+      if(msg_size > 0) {
+        buffer = malloc(msg_size);
+        if(buffer == 0) {
+          //malloc failed
+          return;
+        }
+        to_receive = msg_size;
+        if(receive_from_tcp(participant, buffer, &to_receive)) {
+          event_t* event = create_event(EVENT_TYPE_MESSAGE, msg_code, buffer, msg_size);
+          if(event == NULL) {
+            free(buffer);
+            return;
+          } else {
+            event_dispatcher_post(event);
+          }
+        } else {
+          free(buffer);
+        }
+      }
+    }
+
+  }
+}
+
 static void socket_manager_task(void *params)
 {
   printf("[proto_discovery:] starting to receive multicast messages in IP: %s\n", (char *)params);
@@ -309,35 +408,35 @@ static void socket_manager_task(void *params)
   {
     uint32_t now = now_ms();
     uint32_t next_deadline = UINT32_MAX;
-    bool with_timeout = false;
     int highest_socket = socket;
     fd_set rfds;
     FD_ZERO(&rfds);
     participant_register_t *current = detected_nodes;
     while (current != NULL)
     {
-      if (current->status == CONNECTED)
+      if ((current->status == DISCONNECTED)) {
+        next_deadline = now; //We should try to extablish a connection to that node as soon as possible.
+      }
+      else if (current->status == CONNECTED)
       {
         FD_SET(current->tcp_socket, &rfds);
         if (current->tcp_socket > highest_socket)
           highest_socket = current->tcp_socket;
         LOG_INFO(TAG, "Added the tcp socket of %s:%d to rfds (highest socket: %d)", ipv4_to_str(current->active_ip), current->port, highest_socket);
       }
-      if (current->status == FAILED)
+      else if (current->status == FAILED)
       {
         next_deadline = MIN(next_deadline, now + (current->announce_period * FORGET_NUMBER_OF_PERIODS - (now - current->last_announce)));
-        with_timeout = true;
       }
-      if (current->status == SUSPECT)
+      else if (current->status == SUSPECT)
       {
         next_deadline = MIN(next_deadline, now + (current->announce_period * FAILED_NUMBER_OF_PERIODS - (now - current->last_announce)));
-        with_timeout = true;
       }
-      if (current->status != DEAD)
+      else if (current->status != DEAD)
       {
         next_deadline = MIN(next_deadline, now + (current->announce_period * SUSPECT_NUMBER_OF_PERIODS - (now - current->last_announce)));
-        with_timeout = true;
       }
+      
       current = current->next;
     }
 
@@ -348,23 +447,20 @@ static void socket_manager_task(void *params)
 
     int n = 0;
 
-    if (with_timeout)
-    {
-      uint32_t now_ms_val = now_ms(); // current time (ms)
-      uint32_t remaining = (next_deadline > now_ms_val) ? (next_deadline - now_ms_val) : 0;
-      LOG_INFO(TAG, "Time now: %d; Next action: %d; Difference: %d", now_ms_val, next_deadline, remaining);
-      struct timeval tv;
-      tv.tv_sec = remaining / 1000;
-      tv.tv_usec = (remaining % 1000) * 1000;
-      LOG_INFO(TAG, "Entering Select :: Timeout for select is of %d miliseconds (%d seconds and %d useconds)", remaining, tv.tv_sec, tv.tv_usec);
-      n = lwip_select(highest_socket, &rfds, NULL, NULL, &tv);
+    now = now_ms(); // current time (ms)
+    uint32_t remaining = (next_deadline > now) ? (next_deadline - now) : 0;
+    LOG_INFO(TAG, "Time now: %d; Next action: %d; Difference: %d", now, next_deadline, remaining);
+    
+    if(remaining > 1000) {
+      remaining = 1000;
     }
-    else
-    {
-      LOG_INFO(TAG, "Entering Select :: with no timeout (blocking operation)");
-      n = lwip_select(highest_socket, &rfds, NULL, NULL, NULL);
-    }
+      
+    struct timeval tv;
 
+    tv.tv_sec = remaining / 1000;
+    tv.tv_usec = (remaining % 1000) * 1000;
+    LOG_INFO(TAG, "Entering Select :: Timeout for select is of %d miliseconds (%d seconds and %d useconds)", remaining, tv.tv_sec, tv.tv_usec);
+    n = lwip_select(highest_socket, &rfds, NULL, NULL, &tv);
     LOG_INFO(TAG, "Got out of select with %d active sockets", n);
 
     if (n > 0)
@@ -377,10 +473,7 @@ static void socket_manager_task(void *params)
         {
           // Data was received in this RCP connection
           LOG_INFO(TAG, "processing message from %s:%d", ipv4_to_str(current->active_ip), current->port);
-
-          uint8_t buffer[1024];
-          // read message lenght and then the buffer maybe in a function
-          read(current->tcp_socket, buffer, sizeof(buffer));
+          handle_tcp_client(current);
         }
         current = current->next;
       }
@@ -414,6 +507,32 @@ static void socket_manager_task(void *params)
       }
     }
 
+    // Now perform update of status for all active connections
+    now = now_ms();
+    current = detected_nodes;
+    while(current != NULL) {
+      switch(current->status) {
+        case DISCONNECTED:
+        case CONNECTING:
+          if(now > current->last_announce + SUSPECT_NUMBER_OF_PERIODS * current->announce_period)
+            current->status = SUSPECT;
+        break;
+        case SUSPECT:
+          if(now > current->last_announce + FAILED_NUMBER_OF_PERIODS * current->announce_period)
+            current->status = FAILED;
+        break;
+        case FAILED:
+          if(now > current->last_announce + FORGET_NUMBER_OF_PERIODS * current->announce_period)
+            current->status = DEAD;
+        break;
+        default:
+        break;
+      }
+
+      current = current->next;
+    }
+
+
     // Now perform mainteance on the several discovered devices
     current = detected_nodes;
     while (current != NULL)
@@ -431,19 +550,22 @@ static void socket_manager_task(void *params)
           server_addr.sin_port = htons(current->port);
           server_addr.sin_addr.s_addr = ip4_addr_get_u32(current->active_ip);
 
-          LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+          LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
           if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
           {
-            LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+            LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+            current->status = CONNECTING;
           }
           else
           {
             current->status = CONNECTED;
+            current->connected = true;
           }
         }
         else
         {
           current->status = DEAD;
+          lwip_close(current->tcp_socket);
         }
         break;
       case CONNECTING:
@@ -466,18 +588,19 @@ static void socket_manager_task(void *params)
         server_addr.sin_port = htons(current->port);
         server_addr.sin_addr.s_addr = ip4_addr_get_u32(current->active_ip);
 
-        LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+        LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
         if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
         {
-          LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+          LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
         }
         else
         {
           current->status = CONNECTED;
+          current->connected = true;
         }
         break;
       case CONNECTED:
-
+        LOG_INFO(TAG, "TCP connection active to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
         break;
       case SUSPECT:
 
@@ -487,7 +610,8 @@ static void socket_manager_task(void *params)
         break;
       case DEAD:
       default:
-        // Nothing to be done here...
+        // Nothing to be done here except remove him
+        remove_participan_info(current);
         break;
       }
       current = current->next;
