@@ -54,6 +54,8 @@
 #define LWIP_NETIF_TX_SINGLE_PBUF   1
 #define DHCP_DOES_ARP_CHECK         0
 #define LWIP_DHCP_DOES_ACD_CHECK    0
+#define LWIP_SO_REUSE 1
+#define LWIP_ERRNO    1   // so errno is set meaningfully
 
 #ifndef NDEBUG
 #define LWIP_DEBUG                  1

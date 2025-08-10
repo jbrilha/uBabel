@@ -115,7 +115,7 @@ static participant_register_t *find_participant_by_id(void *buf_ptr)
   participant_register_t *current = detected_nodes;
   while (current != NULL)
   {
-    if (memcpy(current->id, buf_ptr, UUID_SIZE) == 0)
+    if (memcmp(current->id, buf_ptr, UUID_SIZE) == 0)
     {
       return current;
     }
@@ -132,13 +132,13 @@ static void update_participant_info(participant_register_t *p, discovery_msg_t *
 
 static participant_register_t *register_new_participant_info(discovery_msg_t *msg)
 {
-  participant_register_t *participant = (participant_register_t*) malloc(sizeof(participant_register_t));
+  participant_register_t *participant = (participant_register_t *)malloc(sizeof(participant_register_t));
   if (participant == NULL)
   {
     return NULL;
   }
 
-  participant->address = (ip4_addr_t*) malloc(sizeof(ip4_addr_t) * msg->addr_count);
+  participant->address = (ip4_addr_t *)malloc(sizeof(ip4_addr_t) * msg->addr_count);
   if (participant->address == NULL)
   {
     free(participant);
@@ -147,7 +147,7 @@ static participant_register_t *register_new_participant_info(discovery_msg_t *ms
 
   memcpy(participant->id, msg->uuid, UUID_SIZE);
   participant->ips = msg->addr_count;
-  memcpy(participant->address, msg->addrs, msg->addr_count);
+  memcpy(participant->address, msg->addrs, sizeof(ip4_addr_t) * msg->addr_count);
   participant->active_ip = NULL;
   participant->port = msg->unicast_port;
   participant->announce_period = (uint32_t)msg->announce_period;
@@ -156,6 +156,24 @@ static participant_register_t *register_new_participant_info(discovery_msg_t *ms
   participant->status = DISCONNECTED;
   participant->device = UNKNOWN;
   participant->tcp_socket = lwip_socket(AF_INET, SOCK_STREAM, 0);
+  if (participant->tcp_socket >= 0)
+  {
+    // Enable keepalive
+    int keepalive = 1;
+    if (lwip_setsockopt(participant->tcp_socket, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0)
+    {
+      LOG_INFO(TAG, "Failed to set SO_KEEPALIVE");
+    }
+
+    // Optional: fine-tune keepalive behavior
+    int idle = 5;  // idle time before sending first keepalive probe (seconds)
+    int intvl = 5; // interval between probes (seconds)
+    int cnt = 3;   // number of failed probes before considering dead
+
+    lwip_setsockopt(participant->tcp_socket, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+    lwip_setsockopt(participant->tcp_socket, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
+    lwip_setsockopt(participant->tcp_socket, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));
+  }
   participant->next = detected_nodes;
 
   detected_nodes = participant;
@@ -175,6 +193,16 @@ static int initialize_udp_socket()
     return -1;
   }
 
+  // Allow address reuse (important for multicast)
+  int reuse = 1;
+  if (lwip_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+#if LWIP_ERRNO
+    LOG_INFO(TAG, "SO_REUSEADDR not supported or failed (errno=%d). Continuing.\n", errno);
+#else
+    LOG_INFO(TAG, "SO_REUSEADDR not supported. Continuing.\n");
+#endif
+  }
+
   memset(&bind_addr, 0, slen);
   bind_addr.sin_family = AF_INET;
   bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -187,18 +215,23 @@ static int initialize_udp_socket()
     return -1;
   }
 
-  // Allow address reuse (important for multicast)
-  int reuse = 1;
-  if (lwip_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
-  {
-    LOG_INFO(TAG, "Failed to set SO_REUSEADDR\n");
-  }
-
   // Set multicast TTL
   int ttl = 1;
   if (lwip_setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) < 0)
   {
     LOG_INFO(TAG, "Failed to set multicast TTL\n");
+  }
+
+  // Select outgoing interface for multicast
+  if (netif_default != NULL)
+  {
+    struct in_addr ifaddr;
+#if LWIP_IPV4
+    ifaddr.s_addr = ip4_addr_get_u32(netif_ip4_addr(netif_default));
+#else
+    ifaddr.s_addr = htonl(INADDR_ANY);
+#endif
+    lwip_setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, &ifaddr, sizeof(ifaddr));
   }
 
   struct ip_mreq mreq;
@@ -213,7 +246,15 @@ static int initialize_udp_socket()
   }
 
   mreq.imr_multiaddr.s_addr = ip4_addr_get_u32(ip_2_ip4(&group_ip));
-  mreq.imr_interface.s_addr = INADDR_ANY; // Let system choose
+  // Use default netif’s IP if available; otherwise INADDR_ANY
+  if (netif_default)
+  {
+    mreq.imr_interface.s_addr = ip4_addr_get_u32(netif_ip4_addr(netif_default));
+  }
+  else
+  {
+    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+  }
 
   if (lwip_setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
                       &mreq, sizeof(mreq)) < 0)
@@ -228,7 +269,11 @@ static int initialize_udp_socket()
   }
   else
   {
-    LOG_INFO(TAG, "Joined the multicast group using the lwop_getsockopt");
+    char gbuf[16];
+    const ip4_addr_t *g4 = ip_2_ip4(&group_ip);
+    snprintf(gbuf, sizeof gbuf, "%u.%u.%u.%u",
+             ip4_addr1(g4), ip4_addr2(g4), ip4_addr3(g4), ip4_addr4(g4));
+    LOG_INFO(TAG, "Multicast joined on %s", gbuf);
   }
 
   return sock;
@@ -264,6 +309,7 @@ static void socket_manager_task(void *params)
   {
     uint32_t now = now_ms();
     uint32_t next_deadline = UINT32_MAX;
+    bool with_timeout = false;
     int highest_socket = socket;
     fd_set rfds;
     FD_ZERO(&rfds);
@@ -275,41 +321,75 @@ static void socket_manager_task(void *params)
         FD_SET(current->tcp_socket, &rfds);
         if (current->tcp_socket > highest_socket)
           highest_socket = current->tcp_socket;
+        LOG_INFO(TAG, "Added the tcp socket of %s:%d to rfds (highest socket: %d)", ipv4_to_str(current->active_ip), current->port, highest_socket);
       }
       if (current->status == FAILED)
+      {
         next_deadline = MIN(next_deadline, now + (current->announce_period * FORGET_NUMBER_OF_PERIODS - (now - current->last_announce)));
+        with_timeout = true;
+      }
       if (current->status == SUSPECT)
+      {
         next_deadline = MIN(next_deadline, now + (current->announce_period * FAILED_NUMBER_OF_PERIODS - (now - current->last_announce)));
+        with_timeout = true;
+      }
       if (current->status != DEAD)
+      {
         next_deadline = MIN(next_deadline, now + (current->announce_period * SUSPECT_NUMBER_OF_PERIODS - (now - current->last_announce)));
+        with_timeout = true;
+      }
       current = current->next;
     }
 
     FD_SET(socket, &rfds);
+    LOG_INFO(TAG, "Added the udp socket to rfds (highest socket: %d)", highest_socket);
 
-    struct timeval tv = {.tv_sec = next_deadline / 1000, .tv_usec = ((next_deadline - (next_deadline / 1000)) * 1000) * 1000};
     highest_socket++;
 
-    int n = lwip_select(highest_socket, &rfds, NULL, NULL, &tv);
+    int n = 0;
+
+    if (with_timeout)
+    {
+      uint32_t now_ms_val = now_ms(); // current time (ms)
+      uint32_t remaining = (next_deadline > now_ms_val) ? (next_deadline - now_ms_val) : 0;
+      LOG_INFO(TAG, "Time now: %d; Next action: %d; Difference: %d", now_ms_val, next_deadline, remaining);
+      struct timeval tv;
+      tv.tv_sec = remaining / 1000;
+      tv.tv_usec = (remaining % 1000) * 1000;
+      LOG_INFO(TAG, "Entering Select :: Timeout for select is of %d miliseconds (%d seconds and %d useconds)", remaining, tv.tv_sec, tv.tv_usec);
+      n = lwip_select(highest_socket, &rfds, NULL, NULL, &tv);
+    }
+    else
+    {
+      LOG_INFO(TAG, "Entering Select :: with no timeout (blocking operation)");
+      n = lwip_select(highest_socket, &rfds, NULL, NULL, NULL);
+    }
+
+    LOG_INFO(TAG, "Got out of select with %d active sockets", n);
 
     if (n > 0)
     {
-      //Check TCP connections
+      // Check TCP connections
       current = detected_nodes;
-      while(current != NULL) {
-        if(current->status == CONNECTED && FD_ISSET(current->tcp_socket, &rfds)) {
-          //Data was received in this RCP connection
-          
+      while (current != NULL)
+      {
+        if (current->status == CONNECTED && FD_ISSET(current->tcp_socket, &rfds))
+        {
+          // Data was received in this RCP connection
+          LOG_INFO(TAG, "processing message from %s:%d", ipv4_to_str(current->active_ip), current->port);
+
           uint8_t buffer[1024];
-          //read message lenght and then the buffer maybe in a function
+          // read message lenght and then the buffer maybe in a function
           read(current->tcp_socket, buffer, sizeof(buffer));
         }
+        current = current->next;
       }
 
-      //Check the UDP Socket
+      // Check the UDP Socket
       if (FD_ISSET(socket, &rfds))
       {
-        //UDP SOCKET RECEIVED SOMETHING - Potencially a multicast announcement.
+        LOG_INFO(TAG, "processing message from the udp port");
+        // UDP SOCKET RECEIVED SOMETHING - Potencially a multicast announcement.
         msg = malloc(sizeof(discovery_message_t));
         if (msg == NULL)
         {
@@ -334,64 +414,80 @@ static void socket_manager_task(void *params)
       }
     }
 
-    //Now perform mainteance on the several discovered devices
+    // Now perform mainteance on the several discovered devices
     current = detected_nodes;
-    while(current != NULL) {
-      switch(current->status) {
-        case DISCONNECTED:
-          if(current->ips > 0) {
-            current->active_ip = current->address;
+    while (current != NULL)
+    {
+      switch (current->status)
+      {
+      case DISCONNECTED:
+        if (current->ips > 0)
+        {
+          current->active_ip = current->address;
 
-            struct sockaddr_in server_addr;
-            memset(&server_addr, 0, sizeof(server_addr));
-            server_addr.sin_family = AF_INET;
-            server_addr.sin_port = htons(current->port);
-            server_addr.sin_addr.s_addr = ip4_addr_get_u32(current->active_ip);
+          struct sockaddr_in server_addr;
+          memset(&server_addr, 0, sizeof(server_addr));
+          server_addr.sin_family = AF_INET;
+          server_addr.sin_port = htons(current->port);
+          server_addr.sin_addr.s_addr = ip4_addr_get_u32(current->active_ip);
 
-            LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
-            if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-                LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
-            } else {
-                current->status = CONNECTED;
-            }
-          } else {
-            current->status = DEAD;
+          LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+          if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+          {
+            LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
           }
+          else
+          {
+            current->status = CONNECTED;
+          }
+        }
+        else
+        {
+          current->status = DEAD;
+        }
         break;
-        case CONNECTING:
-          if(current->active_ip == NULL) {
-              current->active_ip = current->address;
-            } else if(current->active_ip == (current->address + (current->ips-1))) {
-              current->active_ip = current->address;
-            } else {
-              current->active_ip++;
-            }
+      case CONNECTING:
+        if (current->active_ip == NULL)
+        {
+          current->active_ip = current->address;
+        }
+        else if (current->active_ip == (current->address + (current->ips - 1)))
+        {
+          current->active_ip = current->address;
+        }
+        else
+        {
+          current->active_ip++;
+        }
 
-            struct sockaddr_in server_addr;
-            memset(&server_addr, 0, sizeof(server_addr));
-            server_addr.sin_family = AF_INET;
-            server_addr.sin_port = htons(current->port);
-            server_addr.sin_addr.s_addr = ip4_addr_get_u32(current->active_ip);
+        struct sockaddr_in server_addr;
+        memset(&server_addr, 0, sizeof(server_addr));
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(current->port);
+        server_addr.sin_addr.s_addr = ip4_addr_get_u32(current->active_ip);
 
-            LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
-            if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-                LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
-            } else {
-                current->status = CONNECTED;
-            }
+        LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+        if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+        {
+          LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)\n", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
+        }
+        else
+        {
+          current->status = CONNECTED;
+        }
         break;
-        case CONNECTED:
+      case CONNECTED:
 
         break;
-        case SUSPECT:
+      case SUSPECT:
 
         break;
-        case FAILED:
+      case FAILED:
 
         break;
-        case DEAD:
-        default:
-          //Nothing to be done here...
+      case DEAD:
+      default:
+        // Nothing to be done here...
         break;
       }
       current = current->next;
