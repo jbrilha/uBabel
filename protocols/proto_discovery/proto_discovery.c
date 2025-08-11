@@ -41,6 +41,25 @@ typedef enum connection_status
   DEAD = 5
 } connection_status_t;
 
+static inline char* print_status(connection_status_t status) {
+  switch(status) {
+    case DISCONNECTED:
+      return "DISCONNECTED";
+    case CONNECTING:
+      return "CONNECTING";
+    case CONNECTED:
+      return "CONNECTED";
+    case SUSPECT:
+      return "SUSPECT";
+    case FAILED:
+      return "FAILED";
+    case DEAD:
+      return "DEAD";
+    default:
+      return "unknown";
+  }
+}
+
 typedef enum device_type
 {
   FULL_HOST = 0,
@@ -188,7 +207,7 @@ static participant_register_t *register_new_participant_info(discovery_msg_t *ms
   participant->next_timeout = participant->last_announce + participant->announce_period * SUSPECT_NUMBER_OF_PERIODS;
   participant->status = DISCONNECTED;
   participant->device = UNKNOWN;
-  participant->tcp_socket = setup_tcp_socket();
+  participant->tcp_socket = 0;
   participant->connected = false;
   participant->next = detected_nodes;
 
@@ -204,11 +223,25 @@ static void remove_participan_info(participant_register_t* target) {
       *container = (*container)->next;
       if(target->address != NULL)
         free(target->address);
-      
+      if(target->tcp_socket != 0 || target->connected)
+        lwip_close(target->tcp_socket);
+      free(target);
       return;
     }
     container = &((*container)->next);
   }
+}
+
+void print_participants_info() {
+    participant_register_t* current = detected_nodes;
+    
+    u_int8_t count = 0;
+
+    while(current != NULL) {
+      count++;
+      LOG_INFO(TAG, "Participant %d: %s :: Status: %s Connected %s Active IP: %s", count, uuid_to_string(current->id), print_status(current->status), current->connected?"true":"false",current->active_ip==NULL?"null":ipv4_to_str(current->active_ip));
+      current = current->next;
+    }
 }
 
 static int initialize_udp_socket()
@@ -314,7 +347,7 @@ static bool receive_from_tcp(participant_register_t *participant, uint8_t *ptr, 
       participant->status = DISCONNECTED;
       participant->active_ip = NULL;
       lwip_close(participant->tcp_socket);
-      participant->tcp_socket = setup_tcp_socket();
+      participant->tcp_socket = 0;
       participant->connected = false;
       return false;
     }
@@ -327,7 +360,7 @@ static bool receive_from_tcp(participant_register_t *participant, uint8_t *ptr, 
         participant->status = DISCONNECTED;
         participant->active_ip = NULL;
         lwip_close(participant->tcp_socket);
-        participant->tcp_socket = setup_tcp_socket();
+        participant->tcp_socket = 0;
         participant->connected = false;
         return false;
       }
@@ -406,6 +439,9 @@ static void socket_manager_task(void *params)
 
   while (true)
   {
+
+    print_participants_info();
+
     uint32_t now = now_ms();
     uint32_t next_deadline = UINT32_MAX;
     int highest_socket = socket;
@@ -543,6 +579,7 @@ static void socket_manager_task(void *params)
         if (current->ips > 0)
         {
           current->active_ip = current->address;
+          current->tcp_socket = setup_tcp_socket();
 
           struct sockaddr_in server_addr;
           memset(&server_addr, 0, sizeof(server_addr));
@@ -553,6 +590,8 @@ static void socket_manager_task(void *params)
           LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
           if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
           {
+            lwip_close(current->tcp_socket);
+            current->tcp_socket = 0;
             LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
             current->status = CONNECTING;
           }
@@ -581,6 +620,7 @@ static void socket_manager_task(void *params)
         {
           current->active_ip++;
         }
+        current->tcp_socket = setup_tcp_socket();
 
         struct sockaddr_in server_addr;
         memset(&server_addr, 0, sizeof(server_addr));
@@ -591,6 +631,8 @@ static void socket_manager_task(void *params)
         LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
         if (lwip_connect(current->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
         {
+          lwip_close(current->tcp_socket);
+          current->tcp_socket = 0;
           LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)", uuid_to_string(current->id), ipv4_to_str(current->active_ip), current->port);
         }
         else
