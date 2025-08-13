@@ -25,7 +25,7 @@ static void set_angle(void * obj, int32_t v)
     lv_arc_set_value(obj, v);
 }
 
-void example_lvgl_demo_ui(lv_display_t *disp)
+void lvgl_demo_ui(lv_display_t *disp)
 {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
