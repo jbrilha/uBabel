@@ -22,7 +22,7 @@ menu "Example Configuration"
     choice LCD_TOUCH_CONTROLLER
         prompt "LCD touch controller model"
         depends on LCD_TOUCH_ENABLED
-        default LCD_TOUCH_CONTROLLER_STMPE610
+        default LCD_TOUCH_CONTROLLER_XPT2046
         help
             Select LCD touch controller model
 
