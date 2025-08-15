@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static const char *TAG = "EVENT_DISPATCHER";
+
 #define DISPATCHER_QUEUE_LENGTH 32  // Maximum number of events in the dispatcher queue
 
 static QueueHandle_t dispatcher_queue = NULL;

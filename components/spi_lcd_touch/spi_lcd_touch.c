@@ -22,6 +22,8 @@
 
 #include "event.h"
 #include "event_dispatcher.h"
+ 
+static const char *TAG = "SPI_LCD_TOUCH";
 
 #if CONFIG_LCD_CONTROLLER_ILI9341
 #include "esp_lcd_ili9341.h"

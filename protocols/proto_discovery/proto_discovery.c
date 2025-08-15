@@ -21,7 +21,7 @@
 #define DISCOVERY_MULTICAST_ADDR "239.255.255.250"
 #define DISCOVERY_PORT 9100
 
-#define TAG "proto_discovery"
+static const char *TAG = "proto_discovery";
 
 #define SUSPECT_NUMBER_OF_PERIODS 3
 #define FAILED_NUMBER_OF_PERIODS 6

@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
+static const char *TAG = "UDP";
+
 #define UDP_PORT 8080
 
 #define UDP_RECEIVER_TASK_STACK_SIZE 2048

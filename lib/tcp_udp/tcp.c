@@ -5,6 +5,8 @@
 
 #include "lwip/sockets.h"
 
+static const char *TAG = "TCP";
+
 #define TCP_PORT 8081
 #define ESP32_IP "192.168.4.1" // default
 
