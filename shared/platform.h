@@ -2,8 +2,6 @@
 #define PLATFORM_H
 
 #ifdef BUILD_PICO
-static const char *TAG = "PICO";
-
 #include "pico/stdlib.h"
 
 #include "FreeRTOS.h"
@@ -13,8 +11,6 @@ static const char *TAG = "PICO";
 
 
 #elif defined(BUILD_ESP32)
-static const char *TAG = "ESP32";
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"

@@ -1,5 +1,7 @@
 #include "event.h"
 
+static const char *TAG = "EVENT";
+
 static SemaphoreHandle_t event_mutex;
 
 void init_event_mutex() {

@@ -15,6 +15,8 @@
 #include "network_manager.h"
 #include "event_dispatcher.h"
 
+static const char *TAG = "ESP32_MAIN";
+
 #define MAX_MSG_SIZE 128
 #define MAX_PEERS 5
 
@@ -70,6 +72,15 @@ void wifi_init(void) {
 void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
 
+    xTaskCreate(
+        mem_check_task,   // Task function
+        "mem_check_task",       // Task name
+        4096,                   // Stack size in words
+        NULL,                   // Task parameters
+        1,                      // Priority
+        NULL                    // Task handle
+    );
+
     // event_dispatcher_init();
 
     // wifi_init();
@@ -89,21 +100,13 @@ void app_main(void) {
     //     1,                      // Priority
     //     NULL                    // Task handle
     // );
-    // xTaskCreate(
-    //     lcd_touch_task,   // Task function
-    //     "lcd_task",       // Task name
-    //     4096,                   // Stack size in words
-    //     NULL,                   // Task parameters
-    //     1,                      // Priority
-    //     NULL                    // Task handle
-    // );
-
     xTaskCreate(
-        mem_check_task,   // Task function
-        "mem_check_task",       // Task name
+        lcd_touch_task,   // Task function
+        "lcd_task",       // Task name
         4096,                   // Stack size in words
         NULL,                   // Task parameters
         1,                      // Priority
         NULL                    // Task handle
     );
+
 }

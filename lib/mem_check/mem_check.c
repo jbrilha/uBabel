@@ -5,7 +5,7 @@
 #define MEM_CHECK_TASK_STACK_SIZE 1024
 #define MEM_CHECK_TASK_PRIORITY 1
 
-// static const char *TAG = "MEM_CHECK";
+static const char *TAG = "MEM_CHECK";
 
 #ifdef BUILD_ESP32
 #include "esp_flash.h"

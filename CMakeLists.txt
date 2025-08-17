@@ -30,6 +30,9 @@ if(DEFINED BUILD_PICO)
     add_subdirectory(protocols)
 else()
     add_compile_definitions(BUILD_ESP32=1)
+    if(DEFINED M5STACK_CORE_BASIC)
+        add_compile_definitions(M5STACK_CORE_BASIC=1)
+    endif()
 
     include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 

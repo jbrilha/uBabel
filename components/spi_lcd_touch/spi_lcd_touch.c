@@ -22,6 +22,8 @@
 
 #include "event.h"
 #include "event_dispatcher.h"
+ 
+static const char *TAG = "SPI_LCD_TOUCH";
 
 #if CONFIG_LCD_CONTROLLER_ILI9341
 #include "esp_lcd_ili9341.h"
@@ -60,7 +62,17 @@
 #define LCD_BK_LIGHT_ON_LEVEL 1
 #define LCD_BK_LIGHT_OFF_LEVEL !LCD_BK_LIGHT_ON_LEVEL
 
-#ifdef CONFIG_IDF_TARGET_ESP32
+#ifdef M5STACK_CORE_BASIC
+#define LCD_CS 14
+#define LCD_RST 33
+#define LCD_DC 27
+#define LCD_MOSI 23
+#define LCD_CLK 18
+#define BK_LIGHT 32
+#define LCD_MISO 19
+// no touch capabilities on the Core Basic :(
+#define CONFIG_LCD_TOUCH_ENABLED 0
+#elif defined(CONFIG_IDF_TARGET_ESP32)
 #define LCD_CS 4
 #define LCD_RST 13
 #define LCD_DC 5

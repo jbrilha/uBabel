@@ -18,6 +18,8 @@
 #include "lwip/timeouts.h"
 #include "lwip/udp.h"
 
+static const char *TAG = "NETWORK_MANAGER";
+
 typedef struct open_network_info {
     char ssid[MAX_SSID_LEN + 1];
     int rssi;

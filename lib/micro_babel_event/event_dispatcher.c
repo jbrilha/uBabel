@@ -22,8 +22,6 @@ typedef struct event_type_subscription
     event_subtype_subscription_t *subtypes; // Linked list of subtypes
 } event_type_subscription_t;
 
-
-
 static QueueHandle_t dispatcher_queue = NULL;
 static event_type_subscription_t subscriptions[MAX_EVENT_TYPES];
 

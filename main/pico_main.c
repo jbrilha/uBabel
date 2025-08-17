@@ -32,6 +32,8 @@
 #include "pico_scroll_wrapper.h"
 #include "pico_unicorn_wrapper.h"
 
+static const char *TAG = "PICO_MAIN";
+
 #define WIFI_SSID "ESP32_AP"
 #define WIFI_PASS "superSafeAP"
 #define ESP32_IP "192.168.4.1" // default

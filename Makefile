@@ -1,4 +1,4 @@
-.PHONY: all clean pico esp32 pico-clean esp32-clean flash-pico flash-esp32 monitor-esp32
+.PHONY: all clean pico esp32 pico-clean esp32-clean flash-pico flash-esp32 monitor-esp32 menu menuconfig m5core
 
 all: pico esp32
 
@@ -17,6 +17,11 @@ pico:
 esp32:
 	@echo "Building for ESP32..."
 	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 build
+	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
+
+m5core:
+	@echo "Building for M5Stack Core Basic..."
+	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 clean: clean-pico clean-esp32
@@ -40,3 +45,8 @@ flash-esp32:
 monitor-esp32:
 	@echo "Starting ESP32 monitor..."
 	idf.py monitor
+
+menu: menuconfig
+
+menuconfig:
+	idf.py -B $(ESP32_BUILD_DIR) menuconfig
