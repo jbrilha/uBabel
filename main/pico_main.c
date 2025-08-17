@@ -21,8 +21,8 @@
 #include "network_events.h"
 #include "network_manager.h"
 #include "event_dispatcher.h"
+#include "comm_manager.h"
 #include "pico_buttons.h"
-#include "proto_discovery.h"
 
 #include "tcp.h"
 #include "udp.h"
@@ -240,7 +240,7 @@ void main_task(__unused void *params) {
     );
 
     event_dispatcher_init();
-    proto_discovery_init();
+    comm_manager_init();
 
     scroll_task_init();
     unicorn_task_init();

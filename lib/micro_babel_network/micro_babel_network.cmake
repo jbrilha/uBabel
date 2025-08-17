@@ -11,3 +11,5 @@ target_sources(micro_babel_network INTERFACE
 )
 
 target_include_directories(micro_babel_network INTERFACE ${CMAKE_CURRENT_LIST_DIR})
+
+target_link_libraries(micro_babel_network INTERFACE micro_babel_proto_manager)

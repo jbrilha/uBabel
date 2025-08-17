@@ -16,14 +16,13 @@ if(DEFINED BUILD_PICO)
         pico_async_context_freertos
         FreeRTOS-Kernel-Heap4
         pico_cyw43_arch_lwip_sys_freertos
-        # pico_cyw43_arch_lwip_threadsafe_background
         pico_stdlib
         pico_scroll
         pico_unicorn
         pico_buttons
         micro_babel_network
         micro_babel_event
-        micro_babel_proto_discovery
+        micro_babel_comm_manager
         tcp
         udp
         pico_touch_screen

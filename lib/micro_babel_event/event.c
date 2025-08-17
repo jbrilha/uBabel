@@ -6,7 +6,7 @@ void init_event_mutex() {
     event_mutex = xSemaphoreCreateMutex();
 }
 
-event_t* create_event(event_type_t type, event_subtype_t subtype, void* payload, uint16_t payload_size) {
+event_t* create_event_with_destination(event_type_t type, event_subtype_t subtype, void* payload, uint16_t payload_size, uint16_t protocol_id) {
     event_t* event = malloc(sizeof(event_t));
     if (!event) {
         printf("Failed to allocate memory for event\n");
@@ -24,8 +24,14 @@ event_t* create_event(event_type_t type, event_subtype_t subtype, void* payload,
     }
 
     event->reference_counter = 0;
+    event->proto_source = protocol_id;
+    event->proto_destination = MICRO_BABEL_SYSTEM_PROTOCOL;
     
     return event;
+}
+
+event_t* create_event(event_type_t type, event_subtype_t subtype, void* payload, uint16_t payload_size) {
+    return create_event_with_destination(type, subtype, payload, payload_size, MICRO_BABEL_SYSTEM_PROTOCOL);
 }
 
 void free_event(event_t* event) {
@@ -43,6 +49,8 @@ void free_event(event_t* event) {
 
     xSemaphoreGive(event_mutex);
 }
+
+
 
 void print_event(const event_t* event) {
     if (!event) return;

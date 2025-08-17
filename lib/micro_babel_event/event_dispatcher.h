@@ -3,23 +3,7 @@
 
 #include "platform.h"
 #include "event.h"
-
-#define QUEUE_INITIAL_CAPACITY 3
-
-typedef struct event_subtype_subscription {
-    event_subtype_t subtype;
-    uint16_t queue_count; // Number of queues subscribed to this subtype
-    uint16_t queue_capacity; // Capacity of the queues array
-    QueueHandle_t* queues;
-    struct event_subtype_subscription* next; // Pointer to the next subscription in the linked list
-} event_subtype_subscription_t;
-
-typedef struct event_type_subscription {
-    event_type_t type;
-    event_subtype_subscription_t* subtypes; // Linked list of subtypes
-} event_type_subscription_t;
-
-
+#include "proto_manager.h"
 
 #ifdef __cplusplus
 extern "C" {

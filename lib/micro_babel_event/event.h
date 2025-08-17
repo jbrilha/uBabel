@@ -26,6 +26,9 @@ typedef uint8_t event_type_t;
 #define EVENT_SUBTYPE_NETWORK_UP 101
 #define EVENT_SUBTYPE_NETWORK_DOWN 102
 
+#define MICRO_BABEL_SYSTEM_PROTOCOL 0
+
+
 // === Generic Event Structure ===
 typedef struct {
     event_type_t type;
@@ -33,6 +36,8 @@ typedef struct {
     uint16_t payload_size; // Size of the payload in bytes
     void* payload; // Pointer to the payload data
     uint8_t reference_counter; //Number of references for this event;
+    uint16_t proto_source;
+    uint16_t proto_destination;
 } event_t;
 
 #ifdef __cplusplus
@@ -40,6 +45,8 @@ extern "C" {
 #endif
 
 event_t* create_event(event_type_t type, event_subtype_t subtype, void* payload, uint16_t payload_size);
+event_t* create_event_with_destination(event_type_t type, event_subtype_t subtype, void* payload, uint16_t payload_size, uint16_t protocol_id);
+
 void free_event(event_t* event);
 void print_event(const event_t* event);
 bool is_event_type(const event_t* event, event_type_t type);
