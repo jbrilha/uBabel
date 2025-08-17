@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 
+#define TAG "ProtoManager"
+
 typedef struct protocol_subscription
 {
     uint8_t protocol_id;
