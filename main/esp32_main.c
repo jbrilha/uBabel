@@ -14,6 +14,7 @@
 
 #include "network_manager.h"
 #include "event_dispatcher.h"
+#include "esp_lora.h"
 
 static const char *TAG = "ESP32_MAIN";
 
@@ -100,6 +101,7 @@ void app_main(void) {
     //     1,                      // Priority
     //     NULL                    // Task handle
     // );
+
     xTaskCreate(
         lcd_touch_task,   // Task function
         "lcd_task",       // Task name
@@ -109,4 +111,7 @@ void app_main(void) {
         NULL                    // Task handle
     );
 
+#ifdef M5STACK_CORE_BASIC
+    start_lora_sender_task();
+#endif
 }
