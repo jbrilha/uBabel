@@ -1,1 +1,1 @@
-add_subdirectory(proto_discovery)
+add_subdirectory(proto_simple_overlay)

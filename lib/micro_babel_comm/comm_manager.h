@@ -33,11 +33,15 @@ extern "C" {
 
 bool comm_manager_init(void);
 
+const char *uuid_to_string(uint8_t uuid[UUID_SIZE]);
+
 bool open_conection(const uint8_t* destination_id, uint16_t proto_id);
 void close_conection(const uint8_t* destination_id, uint16_t proto_id);
 
 bool send_message(event_t* msg, const uint8_t* destination_id);
 bool send_message_multiple(event_t* msg, const uint8_t** destinations, uint8_t n_destinations); 
+
+uint8_t* get_local_identifier();
 
 #ifdef __cplusplus
 }

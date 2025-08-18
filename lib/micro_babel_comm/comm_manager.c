@@ -177,7 +177,7 @@ static inline uint32_t now_ms(void)
   return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 }
 
-static const char *uuid_to_string(uint8_t uuid[16])
+const char *uuid_to_string(uint8_t uuid[UUID_SIZE])
 {
   static char out[16 * 2 + 5];
 
@@ -1157,4 +1157,8 @@ bool send_message_multiple(event_t *msg, const uint8_t **destinations, uint8_t n
   }
 
   xSemaphoreGive(comm_mutex);
+}
+
+uint8_t* get_local_identifier() {
+  return my_id;
 }

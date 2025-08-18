@@ -1,11 +1,10 @@
-add_library(micro_babel_proto_discovery INTERFACE)
+add_library(proto_simple_overlay INTERFACE)
 
-target_sources(micro_babel_proto_discovery INTERFACE
-  ${CMAKE_CURRENT_LIST_DIR}/proto_discovery.c
-  ${CMAKE_CURRENT_LIST_DIR}/discovery_parse.c
+target_sources(proto_simple_overlay INTERFACE
+  ${CMAKE_CURRENT_LIST_DIR}/proto_simple_overlay.c
 )
 
-target_include_directories(micro_babel_proto_discovery INTERFACE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(proto_simple_overlay INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
 # Pull in pico libraries that we need
-target_link_libraries(micro_babel_proto_discovery INTERFACE FreeRTOS-Kernel-Heap4 pico_cyw43_arch_lwip_sys_freertos micro_babel_event)
+target_link_libraries(proto_simple_overlay INTERFACE micro_babel_common_events micro_babel_event micro_babel_comm_manager)

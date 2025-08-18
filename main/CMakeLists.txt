@@ -23,10 +23,12 @@ if(DEFINED BUILD_PICO)
         micro_babel_network
         micro_babel_event
         micro_babel_comm_manager
+        micro_babel_common_events
         tcp
         udp
         pico_touch_screen
         mem_check
+        proto_simple_overlay
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)

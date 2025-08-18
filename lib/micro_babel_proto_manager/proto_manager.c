@@ -25,7 +25,7 @@ static protocol_subscription_t *find_protocol_subscription(uint16_t proto_id)
     return current;
 }
 
-bool event_dispatcher_register_protocol(QueueHandle_t queue, uint16_t protocol_id)
+bool proto_manager_register_protocol(QueueHandle_t queue, uint16_t protocol_id)
 {
     protocol_subscription_t *ps = find_protocol_subscription(protocol_id);
     if (ps != NULL)

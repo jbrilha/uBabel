@@ -23,6 +23,8 @@
 #include "event_dispatcher.h"
 #include "comm_manager.h"
 #include "pico_buttons.h"
+#include "common_events.h"
+#include "proto_simple_overlay.h"
 
 #include "tcp.h"
 #include "udp.h"
@@ -92,13 +94,16 @@ void scroll_task_init() {
     scroll_event_queue = xQueueCreate(10, sizeof(event_t*));
     event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_UP);
     event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, EVENT_SUBTYPE_NETWORK_DOWN);
+
+    event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_UP);
+    event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_DOWN);
 }
 
 void scroll_task(__unused void *params) {
 
     pico_scroll_clear();
     pico_scroll_update();
-    pico_scroll_scroll_text("Demo ON!", 255, 100);
+    pico_scroll_scroll_text("Demo ON!", 255, 25);
 
     printf("PicoScroll Started\n");
 
@@ -108,20 +113,28 @@ void scroll_task(__unused void *params) {
 
     while (true) {
         printf("PicoScroll waiting for events...\n");
+        memset(text, 0, 256); // Clear text buffer
         if(xQueueReceive(scroll_event_queue, &event, portMAX_DELAY) == pdTRUE) {
             printf("PicoScroll received event");
             printf("Event description: type=%d subtype=%d\n", event->type, event->subtype);
             if(event->type == EVENT_TYPE_NOTIFICATION) {
-                if(event->subtype == EVENT_SUBTYPE_NETWORK_UP) {
-                    memset(text, 0, 256); // Clear text buffer
+                if(event->subtype == EVENT_SUBTYPE_NETWORK_UP) {              
                     printf("Network: %s\n", ((network_event_t*)event->payload)->ssid);
-                    printf("IP: %s\n", ((network_event_t*)event->payload)->ip);
-                    
+                    printf("IP: %s\n", ((network_event_t*)event->payload)->ip);       
                     sprintf(text, "Network UP: %s %s", ((network_event_t*)event->payload)->ssid, ((network_event_t*)event->payload)->ip);
-                    pico_scroll_scroll_text(text, 255, 100 );
+                    pico_scroll_scroll_text(text, 255, 25 );
                 } else if(event->subtype == EVENT_SUBTYPE_NETWORK_DOWN) {
                     pico_scroll_scroll_text("Network DOWN", 255, 100);
+                } else if(event->subtype == NOTIFICATION_NEIGHBOR_UP) {
+                    printf("Neighbor up: &s", uuid_to_string((uint8_t*) event->payload));
+                    sprintf(text, "Neighbor up: &s", uuid_to_string((uint8_t*) event->payload));
+                    pico_scroll_scroll_text(text, 255, 25);
+                } else if(event->subtype == NOTIFICATION_NEIGHBOR_DOWN) {
+                    printf("Neighbor down: &s", uuid_to_string((uint8_t*) event->payload));
+                    sprintf(text, "Neighbor down: &s", uuid_to_string((uint8_t*) event->payload));
+                    pico_scroll_scroll_text(text, 255, 25);
                 }
+
                 free_event(event);
             }
         }
@@ -257,8 +270,12 @@ void main_task(__unused void *params) {
     xTaskCreate(pico_buttons_task, "buttons_task", configMINIMAL_STACK_SIZE, NULL,
                 WORKER_TASK_PRIORITY, NULL);
 
+    
+
     // xTaskCreate(pico_touch_screen_task, "touch_task", configMINIMAL_STACK_SIZE, NULL,
     //             WORKER_TASK_PRIORITY, NULL);
+
+    simple_overlay_network_init();
 
     xTaskCreate(
         network_manager_task,   // Task function
