@@ -1,8 +1,6 @@
 //proto_manager.h
 #pragma once
 
-#include "FreeRTOS.h"
-#include "queue.h"
 #include <stdio.h>
 #include "platform.h"
 
