@@ -302,6 +302,7 @@ static void remove_participan_info(node_register_t *target)
 
 void print_participants_info()
 {
+  xSemaphoreTake(comm_mutex, portMAX_DELAY);
   node_register_t *current = address_book;
 
   u_int8_t count = 0;
@@ -312,6 +313,7 @@ void print_participants_info()
     LOG_INFO(TAG, "Participant %d: %s :: Status: %s Connected %s Active IP: %s", count, uuid_to_string(current->id), print_status(current->status), current->connected ? "true" : "false", current->active_ip == NULL ? "null" : ipv4_to_str(current->active_ip));
     current = current->next;
   }
+  xSemaphoreGive(comm_mutex);
 }
 
 static int initialize_udp_socket()
@@ -526,6 +528,7 @@ static void socket_manager_task(void *params)
     int highest_socket = socket;
     fd_set rfds;
     FD_ZERO(&rfds);
+    xSemaphoreTake(comm_mutex, portMAX_DELAY);
     node_register_t *current = address_book;
     while (current != NULL)
     {
@@ -538,6 +541,7 @@ static void socket_manager_task(void *params)
       }
       current = current->next;
     }
+    xSemaphoreGive(comm_mutex);
 
     FD_SET(socket, &rfds);
     LOG_INFO(TAG, "Added the udp socket to rfds (highest socket: %d)", highest_socket);
@@ -565,6 +569,7 @@ static void socket_manager_task(void *params)
 
     if (n > 0)
     {
+      xSemaphoreTake(comm_mutex, portMAX_DELAY);
       // Check TCP connections
       current = address_book;
       ;
@@ -578,6 +583,7 @@ static void socket_manager_task(void *params)
         }
         current = current->next;
       }
+      xSemaphoreGive(comm_mutex);
 
       // Check the UDP Socket
       if (FD_ISSET(socket, &rfds))
@@ -609,6 +615,7 @@ static void socket_manager_task(void *params)
     }
 
     // Now perform update of status for all active connections
+    xSemaphoreTake(comm_mutex, portMAX_DELAY);
     now = now_ms();
     current = address_book;
     while (current != NULL)
@@ -676,6 +683,8 @@ static void socket_manager_task(void *params)
 
       current = current->next;
     }
+
+    xSemaphoreGive(comm_mutex);
   }
 }
 
@@ -767,6 +776,97 @@ static void processDiscoveryMessage(event_t *ev)
   }
 }
 
+static void attempt_to_extablish_connection(event_t *event)
+{
+
+  LOG_INFO(TAG, "Request to open connection to %s", uuid_to_string(event->payload));
+  xSemaphoreTake(comm_mutex, portMAX_DELAY);
+  node_register_t *target = find_participant_by_id((uint8_t *)event->payload);
+
+  if (target != NULL)
+  {
+    if (target->status == CONNECTED)
+    {
+      return;
+    }
+
+    event_t *notification = NULL;
+    uint8_t *node_id = (uint8_t *)malloc(UUID_SIZE);
+    if (node_id == NULL)
+    {
+      return;
+    }
+
+    memcpy(node_id, target->id, UUID_SIZE);
+
+    target->status = CONNECTING;
+    for (uint16_t i = 0; target->status != CONNECTED && i < target->ips; i++)
+    {
+      target->active_ip = target->address + (sizeof(ip4_addr_t) * i);
+      target->tcp_socket = setup_tcp_socket();
+
+      struct sockaddr_in server_addr;
+      memset(&server_addr, 0, sizeof(server_addr));
+      server_addr.sin_family = AF_INET;
+      server_addr.sin_port = htons(target->port);
+      server_addr.sin_addr.s_addr = ip4_addr_get_u32(target->active_ip);
+
+      LOG_INFO(TAG, "attempting TCP connection to %s (%s:%d)", uuid_to_string(target->id), ipv4_to_str(target->active_ip), target->port);
+      if (lwip_connect(target->tcp_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+      {
+        lwip_close(target->tcp_socket);
+        target->tcp_socket = 0;
+        LOG_INFO(TAG, "TCP connection failed to %s (%s:%d)", uuid_to_string(target->id), ipv4_to_str(target->active_ip), target->port);
+      }
+      else
+      {
+        target->status = CONNECTED;
+        target->connected = true;
+
+        notification = create_event(EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_CONNECTED, node_id, UUID_SIZE);
+      }
+    }
+
+    if (target->connected == false)
+    {
+      notification = create_event(EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_FAILED, node_id, UUID_SIZE);
+    }
+
+    // Idependely of the outcome, send notifications
+    if (notification != NULL)
+    {
+      notification->reference_counter++;
+      for (uint16_t j = 0; j < target->n_protocols; j++)
+      {
+        QueueHandle_t proto = find_protocol(target->protocols[j]);
+        if (proto != NULL && xQueueSend(proto, &notification, portMAX_DELAY) == pdPASS)
+        {
+          notification->reference_counter++;
+        }
+      }
+      free_event(notification);
+    }
+  }
+  xSemaphoreGive(comm_mutex);
+}
+
+static void attempt_to_close_connection(event_t *event)
+{
+  LOG_INFO(TAG, "Request to close connection to %s", uuid_to_string(event->payload));
+
+  xSemaphoreTake(comm_mutex, portMAX_DELAY);
+  node_register_t *target = find_participant_by_id((uint8_t *)event->payload);
+
+  if(target != NULL && target->n_protocols == 0 && target->connected) {
+    lwip_close(target->tcp_socket);
+    target->tcp_socket = 0;
+    target->active_ip = NULL;
+    target->status = DISCONNECTED;
+    target->connected = false;
+  }
+
+}
+
 static void comm_manager_task(void *params)
 {
   event_t *event;
@@ -794,11 +894,11 @@ static void comm_manager_task(void *params)
       {
         if (event->subtype == EVENT_REQUEST_OPEN_CONNECTION)
         {
-          LOG_INFO(TAG, "Request to open connection to %s", uuid_to_string(event->payload));
+          attempt_to_extablish_connection(event);
         }
         else if (event->subtype == EVENT_REQUEST_CLOSE_CONNECTION)
         {
-          LOG_INFO(TAG, "Request to close connection to %s", uuid_to_string(event->payload));
+          attempt_to_close_connection(event);
         }
         else if (event->subtype == EVENT_REQUEST_ADD_CONNECTION)
         {
@@ -919,7 +1019,7 @@ bool open_conection(const uint8_t *destination_id, uint16_t proto_id)
 
   xSemaphoreTake(comm_mutex, portMAX_DELAY);
 
-  node_register_t *node = find_participant_by_id( (uint8_t*) destination_id);
+  node_register_t *node = find_participant_by_id((uint8_t *)destination_id);
   if (node != NULL)
   {
     if (node->n_protocols == node->n_protocols_capacity)
@@ -945,11 +1045,12 @@ bool open_conection(const uint8_t *destination_id, uint16_t proto_id)
 
     if (node->status != CONNECTED)
     {
-      id = (uint8_t*) malloc(UUID_SIZE);
+      id = (uint8_t *)malloc(UUID_SIZE);
       if (id != NULL)
       {
         memcpy(id, destination_id, UUID_SIZE);
         ev = create_event(EVENT_TYPE_REQUEST, EVENT_REQUEST_OPEN_CONNECTION, id, UUID_SIZE);
+        ev->proto_source = proto_id;
         if (xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY) != pdPASS)
         {
           free_event(ev);
@@ -963,7 +1064,7 @@ bool open_conection(const uint8_t *destination_id, uint16_t proto_id)
       QueueHandle_t requesterQueue = find_protocol(proto_id);
       if (requesterQueue != NULL)
       {
-        id = (uint8_t*) malloc(UUID_SIZE);
+        id = (uint8_t *)malloc(UUID_SIZE);
         if (id != NULL)
         {
           memcpy(id, destination_id, UUID_SIZE);
@@ -974,6 +1075,8 @@ bool open_conection(const uint8_t *destination_id, uint16_t proto_id)
           }
           else
           {
+            ev->reference_counter++;
+            ev->proto_source = proto_id;
             if (xQueueSend(requesterQueue, &ev, portMAX_DELAY) != pdPASS)
             {
               free_event(ev);
@@ -995,12 +1098,17 @@ void close_conection(const uint8_t *destination_id, uint16_t proto_id)
   LOG_INFO(TAG, "Request to close connection %s", uuid_to_string((uint8_t *)destination_id));
   xSemaphoreTake(comm_mutex, portMAX_DELAY);
 
-  node_register_t *node = find_participant_by_id( (uint8_t*) destination_id);
+  node_register_t *node = find_participant_by_id((uint8_t *)destination_id);
   if (node != NULL)
   {
-    uint16_t p = 0;
+    event_t *ev = NULL;
+    uint8_t *id = (uint8_t *)malloc(UUID_SIZE);
+    if (id != NULL)
+    {
+      memcpy(id, destination_id, UUID_SIZE);
+    }
 
-    for (; p < node->n_protocols; p++)
+    for (uint16_t p = 0; p < node->n_protocols; p++)
     {
       if (node->protocols[p] == proto_id)
       {
@@ -1009,19 +1117,18 @@ void close_conection(const uint8_t *destination_id, uint16_t proto_id)
           node->protocols[p] = node->protocols[p + 1];
         }
         node->n_protocols--;
+        break;
       }
     }
 
-    if (node->n_protocols <= 0)
+    if (node->n_protocols <= 00 && id != NULL)
     {
-      uint8_t *id = (uint8_t*) malloc(UUID_SIZE);
-      if (id != NULL)
+      ev = create_event(EVENT_TYPE_REQUEST, EVENT_REQUEST_CLOSE_CONNECTION, id, UUID_SIZE);
+      if (ev != NULL && xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY) != pdPASS)
       {
-        event_t *ev = create_event(EVENT_TYPE_REQUEST, EVENT_REQUEST_CLOSE_CONNECTION, id, UUID_SIZE);
-        if (ev != NULL && xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY) != pdPASS)
-        {
-          free_event(ev);
-        }
+        ev->proto_source = proto_id;
+        ev->reference_counter++;
+        free_event(ev);
       }
       else
       {
