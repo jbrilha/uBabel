@@ -43,8 +43,13 @@ static const char *TAG = "SPI_LCD_TOUCH";
 // can be the same for this display
 #define TOUCH_HOST LCD_HOST 
 
+#ifndef M5STACK_CORE_BASIC
 #define LCD_H_RES 240
 #define LCD_V_RES 320
+#else
+#define LCD_H_RES 320
+#define LCD_V_RES 240
+#endif
 
 #define LCD_PIXEL_CLOCK_HZ (20 * 1000 * 1000)
 #define BITS_PER_PIXEL 16
@@ -69,7 +74,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_MOSI 23
 #define LCD_CLK 18
 #define BK_LIGHT 32
-#define LCD_MISO 19
+#define LCD_MISO 23
 // no touch capabilities on the Core Basic :(
 #define CONFIG_LCD_TOUCH_ENABLED 0
 #elif defined(CONFIG_IDF_TARGET_ESP32)
