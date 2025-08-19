@@ -202,6 +202,7 @@ void event_dispatcher_task(void *params)
 
             if (is_event_type(event, EVENT_TYPE_REQUEST) && event->proto_destination != MICRO_BABEL_SYSTEM_PROTOCOL)
             {
+                LOG_INFO(TAG, "Dispatching event by using its proto_destination = %d", event->proto_destination);
                 QueueHandle_t protocol_queue = find_protocol(event->proto_destination);
                 if (protocol_queue != NULL && xQueueSend(protocol_queue, &event, portMAX_DELAY) != pdPASS)
                 {
@@ -214,30 +215,36 @@ void event_dispatcher_task(void *params)
             }
             else
             {
+                LOG_INFO(TAG, "Dispatching event by using its type = %d and subtype = %d", event->type, event->subtype);
                 event_subtype_subscription_t *subtype_node = find_subtype_subscription(find_type_subscriptions(event->type), event->subtype);
                 if (subtype_node == NULL)
                 {
-                    LOG_INFO(TAG, "No subscriptions found for event type=%d subtype=%d\n", event->type, event->subtype);
+                    LOG_INFO(TAG, "No subscriptions found for event type=%d subtype=%d", event->type, event->subtype);
                     free_event(event);
                     continue;
                 }
 
                 event->reference_counter++;
 
+                LOG_INFO(TAG, "Dispatching event to %d diffrent queues", subtype_node->queue_count);
                 for (int i = 0; i < subtype_node->queue_count; i++)
                 {
+                    event->reference_counter++;
                     if (xQueueSend(subtype_node->queues[i], &event, portMAX_DELAY) != pdPASS)
                     {
-                        LOG_INFO(TAG, "Failed to send event to queue %d for type=%d subtype=%d\n", i, event->type, event->subtype);
+                        free_event(event);
+                        LOG_INFO(TAG, "Failed to send event to queue %d for type=%d subtype=%d", i, event->type, event->subtype);
                     }
                     else
-                    {
-                        event->reference_counter++;
+                    {  
+                        LOG_INFO(TAG, "Dispatched the event successfully once");
                     }
                 }
 
                 free_event(event);
             }
+
+            LOG_INFO(TAG, "Finished dispatching event");
         }
     }
 }
@@ -248,10 +255,16 @@ bool event_dispatcher_init(void)
     dispatcher_queue = xQueueCreate(DISPATCHER_QUEUE_LENGTH, sizeof(event_t *));
     if (!dispatcher_queue)
     {
-        LOG_INFO(TAG, "Failed to create event dispatcher queue.\n");
+        LOG_ERROR(TAG, "Failed to create event dispatcher queue.\n");
+        return false;
     }
     subscription_mutex = xSemaphoreCreateMutex();
     dispatch_mutex = xSemaphoreCreateMutex();
+
+    if(subscription_mutex == NULL || dispatch_mutex == NULL) {
+        LOG_ERROR(TAG, "Failed to initialize the mutex objects of dispatacher task");
+        return false;
+    }
 
     if (!subscription_mutex)
     {

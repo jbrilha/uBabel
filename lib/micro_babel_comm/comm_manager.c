@@ -757,6 +757,7 @@ static void processDiscoveryMessage(event_t *ev)
             LOG_ERROR(TAG, "Could not allocate space for event EVENT_NOTIFICAITON_NODE_DISCOVERED");
             return;
           }
+          LOG_INFO(TAG, "Emitting NOTIFICATION NODE DISCOVERED for %s", uuid_to_string(id));
           event_dispatcher_post(e);
         }
       }

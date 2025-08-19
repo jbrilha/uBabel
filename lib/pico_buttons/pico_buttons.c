@@ -6,6 +6,9 @@
 
 #define debounce_cycles 20
 
+// Help to debug, generate a unique identifier for the event generating tasks
+#define BUTTON_PROTO_ID 100
+
 typedef enum pin {
   A     = 12,
   B     = 13,
@@ -36,6 +39,7 @@ void pico_buttons_task(__unused void *params) {
     if(debounceA == 0 && is_pressed(A)) {
       event_t *event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_A_PRESSED, NULL, 0);
       if(event) {
+        event->proto_source = BUTTON_PROTO_ID;
         event_dispatcher_post(event);
       }
       debounceA =debounce_cycles;
@@ -46,6 +50,7 @@ void pico_buttons_task(__unused void *params) {
     if(debounceB == 0 && is_pressed(B)) {
       event_t *event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_B_PRESSED, NULL, 0);
       if(event) {
+        event->proto_source = BUTTON_PROTO_ID;
         event_dispatcher_post(event);
       } 
       debounceB = debounce_cycles;
@@ -56,6 +61,7 @@ void pico_buttons_task(__unused void *params) {
     if(debounceX == 0 && is_pressed(X)) {
       event_t *event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_X_PRESSED, NULL, 0);
       if(event) {
+        event->proto_source = BUTTON_PROTO_ID;
         event_dispatcher_post(event);
       }
       debounceX = debounce_cycles;
@@ -66,6 +72,7 @@ void pico_buttons_task(__unused void *params) {
     if(debounceY == 0 && is_pressed(Y)) {
       event_t *event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_Y_PRESSED, NULL, 0);
       if(event) {
+        event->proto_source = BUTTON_PROTO_ID;
         event_dispatcher_post(event);
       } 
       debounceY = debounce_cycles;

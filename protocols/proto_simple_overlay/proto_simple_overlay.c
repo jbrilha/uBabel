@@ -45,9 +45,9 @@ static candidate_node_t* detach_first(candidate_node_t** head_of_list, uint8_t* 
   candidate_node_t* target = NULL;
   if(*head_of_list != NULL) {
     target = *head_of_list;
-    *head_of_list = target->next;
+    (*head_of_list) = target->next;
     target->next = NULL;
-    *counter--;
+    (*counter)--;
   }
   return target;
 }
@@ -58,8 +58,8 @@ static candidate_node_t* detach_node(uint8_t* id, candidate_node_t** head_of_lis
   while(*current != NULL) {
     if(memcmp((*current)->id, id, UUID_SIZE) == 0) {
       candidate_node_t* target = *current;
-      *current = (*current)->next;
-      *counter--;
+      (*current) = (*current)->next;
+      (*counter)--;
       return target;
     }
     current = &((*current)->next);
@@ -70,8 +70,8 @@ static candidate_node_t* detach_node(uint8_t* id, candidate_node_t** head_of_lis
 
 static void add_node(candidate_node_t* node, candidate_node_t** head_of_list, uint8_t* counter) {
   node->next = *head_of_list;
-  *head_of_list = node;
-  *counter++;
+  (*head_of_list) = node;
+  (*counter)++;
 }
 
 static bool check_node_exists(uint8_t* id) {
@@ -90,6 +90,7 @@ static void simple_overlay_task() {
       {
         if (event->subtype == EVENT_NOTIFICATION_NODE_DISCOVERED)
         {
+          LOG_INFO(TAG, "Received a NODE DISCOVERED NOTIFICATION");
           if(!check_node_exists((uint8_t*) event->payload)) {  
 
             candidate_node_t* node = (candidate_node_t*) malloc(sizeof(candidate_node_t));
@@ -98,6 +99,8 @@ static void simple_overlay_task() {
               node->next = NULL;
               add_node(node, &candidates, &n_candidates);
              }
+          } else {
+            LOG_INFO(TAG, "Node already known, ignoring...");
           }
         } else if (event->subtype == EVENT_NOTIFICATION_NODE_CONNECTED) {
           candidate_node_t* t = detach_node((uint8_t*) event->payload, &connecting, &n_connecting);
@@ -127,10 +130,12 @@ static void simple_overlay_task() {
           }
         }
       }
+
+      free_event(event);
+      event = NULL;
     }
 
-    free_event(event);
-    event = NULL;
+    LOG_INFO(TAG, "\nChecking number of neighbors. n_neighbors = %d, n_connecting = %d, TARGET_NEIGHBORS = %d, n_candidates = %d, condition is %s\n",n_neighbors, n_connecting, TARGET_NEIGHBORS, n_candidates, n_neighbors + n_connecting < TARGET_NEIGHBORS && n_candidates > 0 ? "true" : "false" );
 
     while(n_neighbors + n_connecting < TARGET_NEIGHBORS && n_candidates > 0) {
       LOG_INFO(TAG, "trying to fill in neighbors (have %d candidates)");
@@ -150,14 +155,19 @@ void simple_overlay_network_init() {
   LOG_INFO(TAG, "Initializing protocol with id %s", uuid_to_string(id));
   
   simple_overlay_queue = xQueueCreate(PROTO_QUEUE_SIZE, sizeof(event_t*));
+
+  if(!simple_overlay_queue) {
+    LOG_ERROR(TAG, "Failed to initialize the queue for the simple overlay protocol");
+  }
+
   neighbors = NULL;
   connecting = NULL;
   candidates = NULL;
 
-  //proto_manager_register_protocol(simple_overlay_queue, SIMPLE_OVERLAY_PROTO_ID);
-  //event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_DISCOVERED);
+  proto_manager_register_protocol(simple_overlay_queue, SIMPLE_OVERLAY_PROTO_ID);
+  event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_DISCOVERED);
 
-  //xTaskCreate(simple_overlay_task, "simple_overlay_protocol", SIMPLE_OVERLAY_TASK_STACK_SIZE, NULL, SIMPLE_OVERLAY_TASK_PRIORITY, NULL);
+  xTaskCreate(simple_overlay_task, "simple_overlay_protocol", SIMPLE_OVERLAY_TASK_STACK_SIZE, NULL, SIMPLE_OVERLAY_TASK_PRIORITY, NULL);
 
   LOG_INFO(TAG, "Initialized the task");
 }
