@@ -56,6 +56,8 @@ void init_lora() {
 void sender_task(void *pvParameters) {
     int state;
 
+    radio.setCRC(true);
+
     for (;;) {
         ESP_LOGI(TAG, "[SX1276] Transmitting packet ... ");
 
