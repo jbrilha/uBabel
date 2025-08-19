@@ -126,12 +126,12 @@ void scroll_task(__unused void *params) {
                 } else if(event->subtype == EVENT_SUBTYPE_NETWORK_DOWN) {
                     pico_scroll_scroll_text("Network DOWN", 255, 100);
                 } else if(event->subtype == NOTIFICATION_NEIGHBOR_UP) {
-                    printf("Neighbor up: &s", uuid_to_string((uint8_t*) event->payload));
-                    sprintf(text, "Neighbor up: &s", uuid_to_string((uint8_t*) event->payload));
+                    printf("Neighbor up: %s", uuid_to_string((uint8_t*) event->payload));
+                    sprintf(text, "Neighbor up: %s", uuid_to_string((uint8_t*) event->payload));
                     pico_scroll_scroll_text(text, 255, 25);
                 } else if(event->subtype == NOTIFICATION_NEIGHBOR_DOWN) {
-                    printf("Neighbor down: &s", uuid_to_string((uint8_t*) event->payload));
-                    sprintf(text, "Neighbor down: &s", uuid_to_string((uint8_t*) event->payload));
+                    printf("Neighbor down: %s", uuid_to_string((uint8_t*) event->payload));
+                    sprintf(text, "Neighbor down: %s", uuid_to_string((uint8_t*) event->payload));
                     pico_scroll_scroll_text(text, 255, 25);
                 }
 

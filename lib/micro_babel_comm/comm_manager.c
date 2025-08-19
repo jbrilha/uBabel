@@ -698,9 +698,54 @@ static void handle_network_up_event(event_t *ev)
 
 static void handle_network_down_event(event_t *ev)
 {
+  xSemaphoreTake(comm_mutex, portMAX_DELAY);
+
   TaskHandle_t udpTask = xTaskGetHandle("proto_discovery_udp");
   if (udpTask != NULL)
     vTaskDelete(udpTask);
+
+  //Destroy UDP socket
+  lwip_close(socket);
+  socket = 0;
+
+  //Close TCP connections and remove all information about participants
+  while(address_book != NULL) {
+    node_register_t* current = address_book;
+    if(current->connected) {
+      lwip_close(current->tcp_socket);
+      current->tcp_socket = 0;
+    }
+
+    //Send notification for protocols of failed connections
+    uint8_t* failed_node = NULL;
+    event_t* failed_notification = NULL;
+
+    failed_node = (uint8_t*) malloc(UUID_SIZE);
+    if(failed_node != NULL) {
+      memcpy(failed_node, current->id, UUID_SIZE);
+      failed_notification = create_event(EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_FAILED, failed_node, UUID_SIZE);
+      
+      if(failed_notification != NULL) {
+        failed_notification->reference_counter++;
+
+        for(uint16_t i = 0; i < current->n_protocols; i++) {
+          QueueHandle_t proto = find_protocol(current->protocols[i]);
+          if(proto != NULL) {
+            failed_notification->reference_counter++;
+            if(xQueueSend(proto, &failed_notification, portMAX_DELAY) != pdPASS)
+              free_event(failed_notification);
+          }
+        }
+      
+        free_event(failed_notification);
+      }    
+    }
+
+    address_book = address_book->next;
+    remove_participan_info(current);
+  }
+
+  xSemaphoreGive(comm_mutex);
 }
 
 static void processDiscoveryMessage(event_t *ev)
