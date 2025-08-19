@@ -160,7 +160,7 @@ bool event_dispatcher_unregister(QueueHandle_t queue, event_type_t type, uint16_
 
     if (!subtype_node)
     {
-        LOG_INFO(TAG, "Failed to get subtype subscription for type=%d subtype=%d\n", type, subtype);
+        LOG_INFO(TAG, "Failed to get subtype subscription for type=%d subtype=%d", type, subtype);
         xSemaphoreGive(subscription_mutex);
         return true;
     }
@@ -172,7 +172,7 @@ bool event_dispatcher_unregister(QueueHandle_t queue, event_type_t type, uint16_
 
 bool event_dispatcher_post(event_t *event)
 {
-    LOG_INFO(TAG, "Posting event type=%d subtype=%d\n", event->type, event->subtype);
+    LOG_INFO(TAG, "Posting event type=%d subtype=%d origin=%d destination=%d", event->type, event->subtype, event->proto_source, event->proto_destination);
     if (!dispatcher_queue)
         return false;
 
@@ -187,7 +187,7 @@ bool event_dispatcher_post(event_t *event)
     }
 
     xSemaphoreGive(dispatch_mutex);
-    LOG_INFO(TAG, "Event posted successfully type=%d subtype=%d\n", event->type, event->subtype);
+    LOG_INFO(TAG, "Event posted successfully type=%d subtype=%d", event->type, event->subtype);
     return true;
 }
 
@@ -198,7 +198,7 @@ void event_dispatcher_task(void *params)
     {
         if (xQueueReceive(dispatcher_queue, &event, portMAX_DELAY) == pdPASS)
         {
-            LOG_INFO(TAG, "Dispatching event type=%d subtype=%d\n", event->type, event->subtype);
+            LOG_INFO(TAG, "Dispatching event type=%d subtype=%d", event->type, event->subtype);
 
             if (is_event_type(event, EVENT_TYPE_REQUEST) && event->proto_destination != MICRO_BABEL_SYSTEM_PROTOCOL)
             {

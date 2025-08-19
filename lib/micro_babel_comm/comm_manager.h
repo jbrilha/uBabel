@@ -41,7 +41,7 @@ void close_conection(const uint8_t* destination_id, uint16_t proto_id);
 bool send_message(event_t* msg, const uint8_t* destination_id);
 bool send_message_multiple(event_t* msg, const uint8_t** destinations, uint8_t n_destinations); 
 
-uint8_t* get_local_identifier();
+void get_local_identifier(uint8_t* id);
 
 #ifdef __cplusplus
 }

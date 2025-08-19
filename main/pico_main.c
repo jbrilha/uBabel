@@ -164,7 +164,7 @@ void unicorn_task(__unused void *params) {
 
     int i = 0;
     while(true) {
-        if(xQueueReceive(unicorn_event_queue, &event, pdMS_TO_TICKS(20)) == pdTRUE) {
+        if(xQueueReceive(unicorn_event_queue, &event, pdMS_TO_TICKS(10)) == pdTRUE) {
             printf("PicoUnicorn received event");
             printf("Event description: type=%d subtype=%d\n", event->type, event->subtype);
 
@@ -275,8 +275,6 @@ void main_task(__unused void *params) {
     // xTaskCreate(pico_touch_screen_task, "touch_task", configMINIMAL_STACK_SIZE, NULL,
     //             WORKER_TASK_PRIORITY, NULL);
 
-    simple_overlay_network_init();
-
     xTaskCreate(
         network_manager_task,   // Task function
         "NetworkManager",       // Task name
@@ -285,6 +283,8 @@ void main_task(__unused void *params) {
         5,                      // Priority
         NULL                    // Task handle
     );
+
+    simple_overlay_network_init();
 
     vTaskDelete(NULL);
 }

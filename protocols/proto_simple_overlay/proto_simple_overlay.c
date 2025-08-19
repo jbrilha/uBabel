@@ -5,18 +5,22 @@
 #include "comm_manager.h"
 #include "common_events.h"
 
-#define SIMPLE_OVERLAY_TASK_PRIORITY (tskIDLE_PRIORITY + 2UL)
+#define SIMPLE_OVERLAY_TASK_PRIORITY (tskIDLE_PRIORITY + 1UL)
 #define SIMPLE_OVERLAY_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
 #define TARGET_NEIGHBORS 5
-#define PROTO_QUEUE_SIZE 10
+#define PROTO_QUEUE_SIZE 5
+
+#define DELTA_PERIOD 3000
+
+#define TAG "Simple Overlay Protocol"
 
 typedef struct candidate_node {
   uint8_t id[UUID_SIZE];
   struct candidate_node* next;
 } candidate_node_t;
 
-static uint8_t* id;
+static uint8_t id[UUID_SIZE];
 static QueueHandle_t simple_overlay_queue;
 
 static candidate_node_t* neighbors;
@@ -79,7 +83,8 @@ static void simple_overlay_task() {
 
   while (true)
   {
-    if (xQueueReceive(simple_overlay_queue, &event, pdMS_TO_TICKS(10)) == pdPASS)
+    LOG_INFO(TAG, "main cycle activity");
+    if (xQueueReceive(simple_overlay_queue, &event, pdMS_TO_TICKS(DELTA_PERIOD)) == pdPASS)
     {
       if (event->type == EVENT_TYPE_NOTIFICATION)
       {
@@ -128,6 +133,7 @@ static void simple_overlay_task() {
     event = NULL;
 
     while(n_neighbors + n_connecting < TARGET_NEIGHBORS && n_candidates > 0) {
+      LOG_INFO(TAG, "trying to fill in neighbors (have %d candidates)");
       candidate_node_t* c = detach_first(&candidates, &n_candidates);
       if(c != NULL) {
         open_conection(c->id, SIMPLE_OVERLAY_PROTO_ID);
@@ -139,16 +145,19 @@ static void simple_overlay_task() {
 
 
 void simple_overlay_network_init() {
-  id = get_local_identifier();
+  get_local_identifier(id);
 
+  LOG_INFO(TAG, "Initializing protocol with id %s", uuid_to_string(id));
+  
   simple_overlay_queue = xQueueCreate(PROTO_QUEUE_SIZE, sizeof(event_t*));
   neighbors = NULL;
   connecting = NULL;
   candidates = NULL;
 
-  proto_manager_register_protocol(simple_overlay_queue, SIMPLE_OVERLAY_PROTO_ID);
-  event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_DISCOVERED);
+  //proto_manager_register_protocol(simple_overlay_queue, SIMPLE_OVERLAY_PROTO_ID);
+  //event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_DISCOVERED);
 
-  xTaskCreate(simple_overlay_task, "simple_overlay_protocol", SIMPLE_OVERLAY_TASK_STACK_SIZE, NULL,
-                SIMPLE_OVERLAY_TASK_PRIORITY, NULL);
+  //xTaskCreate(simple_overlay_task, "simple_overlay_protocol", SIMPLE_OVERLAY_TASK_STACK_SIZE, NULL, SIMPLE_OVERLAY_TASK_PRIORITY, NULL);
+
+  LOG_INFO(TAG, "Initialized the task");
 }

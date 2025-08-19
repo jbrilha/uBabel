@@ -6,7 +6,7 @@
 
 typedef struct protocol_subscription
 {
-    uint8_t protocol_id;
+    uint16_t protocol_id;
     QueueHandle_t queue;
     struct protocol_subscription *next;
 } protocol_subscription_t;
