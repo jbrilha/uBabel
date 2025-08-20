@@ -14,7 +14,7 @@
 #include "esp_lcd_types.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "lvgl.h"
+#include "lvgl_ui.h"
 #include <stdio.h>
 #include <sys/lock.h>
 #include <sys/param.h>
@@ -22,7 +22,7 @@
 
 #include "event.h"
 #include "event_dispatcher.h"
- 
+
 static const char *TAG = "SPI_LCD_TOUCH";
 
 #if CONFIG_LCD_CONTROLLER_ILI9341
@@ -41,7 +41,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 
 #if CONFIG_LCD_CONTROLLER_ILI9341
 // can be the same for this display
-#define TOUCH_HOST LCD_HOST 
+#define TOUCH_HOST LCD_HOST
 
 #ifndef M5STACK_CORE_BASIC
 #define LCD_H_RES 240
@@ -120,7 +120,6 @@ static _lock_t lvgl_api_lock;
 static esp_lcd_panel_io_handle_t io_handle = NULL;
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
-extern void lvgl_demo_ui(lv_disp_t *disp);
 
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
                                     esp_lcd_panel_io_event_data_t *edata,
@@ -139,15 +138,16 @@ static void lvgl_port_update_callback(lv_display_t *disp) {
     lv_display_rotation_t rotation = lv_display_get_rotation(disp);
     event_t *event;
 
+    bool mirror_x = true;
+#ifdef CONFIG_LCD_CONTROLLER_ILI9488
+    mirror_x = false;
+#endif
+
     switch (rotation) {
     case LV_DISPLAY_ROTATION_0:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, false);
-#if CONFIG_LCD_CONTROLLER_ILI9341
-        esp_lcd_panel_mirror(panel_handle, true, false);
-#elif CONFIG_LCD_CONTROLLER_ILI9488
-        esp_lcd_panel_mirror(panel_handle, false, false);
-#endif
+        esp_lcd_panel_mirror(panel_handle, mirror_x, false);
         if (last_rotation != rotation) {
             event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_0,
                                  NULL, 0);
@@ -159,11 +159,7 @@ static void lvgl_port_update_callback(lv_display_t *disp) {
     case LV_DISPLAY_ROTATION_90:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, true);
-#if CONFIG_LCD_CONTROLLER_ILI9341
-        esp_lcd_panel_mirror(panel_handle, true, true);
-#elif CONFIG_LCD_CONTROLLER_ILI9488
-        esp_lcd_panel_mirror(panel_handle, false, true);
-#endif
+        esp_lcd_panel_mirror(panel_handle, mirror_x, true);
         if (last_rotation != rotation) {
             event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_90,
                                  NULL, 0);
@@ -175,11 +171,7 @@ static void lvgl_port_update_callback(lv_display_t *disp) {
     case LV_DISPLAY_ROTATION_180:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, false);
-#if CONFIG_LCD_CONTROLLER_ILI9341
-        esp_lcd_panel_mirror(panel_handle, false, true);
-#elif CONFIG_LCD_CONTROLLER_ILI9488
-        esp_lcd_panel_mirror(panel_handle, true, true);
-#endif
+        esp_lcd_panel_mirror(panel_handle, !mirror_x, true);
         if (last_rotation != rotation) {
             event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_180,
                                  NULL, 0);
@@ -191,11 +183,7 @@ static void lvgl_port_update_callback(lv_display_t *disp) {
     case LV_DISPLAY_ROTATION_270:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, true);
-#if CONFIG_LCD_CONTROLLER_ILI9341
-        esp_lcd_panel_mirror(panel_handle, false, false);
-#elif CONFIG_LCD_CONTROLLER_ILI9488
-        esp_lcd_panel_mirror(panel_handle, true, false);
-#endif
+        esp_lcd_panel_mirror(panel_handle, !mirror_x, false);
         if (last_rotation != rotation) {
             event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_270,
                                  NULL, 0);
@@ -365,8 +353,8 @@ static void lvgl_touch_cb(lv_indev_t *indev, lv_indev_data_t *data) {
         touch_pad, touchpad_x, touchpad_y, NULL, &touchpad_cnt, 1);
 
     if (touchpad_pressed && touchpad_cnt > 0) {
-        ESP_LOGW(TAG, "Touch pressed: x=%d, y=%d, count=%d", 
-                 touchpad_x[0], touchpad_y[0], touchpad_cnt);
+        ESP_LOGW(TAG, "Touch pressed: x=%d, y=%d, count=%d", touchpad_x[0],
+                 touchpad_y[0], touchpad_cnt);
         data->point.x = touchpad_x[0];
         data->point.y = touchpad_y[0];
         data->state = LV_INDEV_STATE_PRESSED;
@@ -472,7 +460,8 @@ void lcd_touch_task(void *pvParameters) {
     ESP_LOGI(TAG, "Display LVGL Meter Widget");
     // Lock the mutex due to the LVGL APIs are not thread-safe
     _lock_acquire(&lvgl_api_lock);
-    lvgl_demo_ui(display);
+    // lvgl_demo_ui(display);
+    lvgl_temp_bar_init(display, &lvgl_api_lock);
     _lock_release(&lvgl_api_lock);
 
     vTaskDelete(NULL);
