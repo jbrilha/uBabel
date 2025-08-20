@@ -14,7 +14,9 @@
 
 #include "network_manager.h"
 #include "event_dispatcher.h"
+#ifdef M5STACK_CORE_BASIC
 #include "esp_lora.h"
+#endif
 
 static const char *TAG = "ESP32_MAIN";
 
