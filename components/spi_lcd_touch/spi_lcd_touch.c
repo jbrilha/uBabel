@@ -107,7 +107,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LVGL_TICK_PERIOD_MS 2
 #define LVGL_TASK_MAX_DELAY_MS 500
 #define LVGL_TASK_MIN_DELAY_MS 1000 / CONFIG_FREERTOS_HZ
-#define LVGL_TASK_STACK_SIZE (4 * 1024)
+#define LVGL_TASK_STACK_SIZE (8 * 1024)
 #define LVGL_TASK_PRIORITY 2
 
 // LVGL library is not thread-safe, this example will call LVGL APIs from
@@ -450,10 +450,9 @@ void lcd_touch_task(void *pvParameters) {
     ESP_LOGI(TAG, "Display LVGL Meter Widget");
     lvgl_flex_layout_init(display, &lvgl_api_lock);
 
-    temperature_bar_init_on_container(lvgl_flex_layout_get_col(1),
-                                      &lvgl_api_lock, true, false);
-
-    temperature_bar_animate_to_val(38);
+    messenger_widget_init_on_container(lvgl_flex_layout_get_col(0), &lvgl_api_lock);
+    temperature_widget_init_on_container(lvgl_flex_layout_get_col(1),
+                                         &lvgl_api_lock, true, false);
 
     vTaskDelete(NULL);
 }

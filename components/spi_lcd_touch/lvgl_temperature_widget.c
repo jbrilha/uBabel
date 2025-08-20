@@ -1,5 +1,5 @@
 #include "esp_log.h"
-#include "lvgl_ui.h"
+#include "lvgl_temperature_widget.h"
 
 #define BAR_MIN 0
 #define BAR_MAX 40
@@ -11,6 +11,7 @@
 
 static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *ui_bar = NULL;
+static lv_obj_t *ui_btn = NULL;
 
 static void set_temp(void *bar, int32_t temp) {
     lv_bar_set_value((lv_obj_t *)bar, temp, LV_ANIM_ON);
@@ -23,6 +24,11 @@ static void init_style(lv_style_t *style) {
     lv_style_set_bg_color(style, lv_palette_main(LV_PALETTE_RED));
     lv_style_set_bg_grad_color(style, lv_palette_main(LV_PALETTE_BLUE));
     lv_style_set_bg_grad_dir(style, LV_GRAD_DIR_VER);
+}
+
+static void btn_cb(lv_event_t *e) {
+    // todo send request via event queue
+    ESP_LOGI("A", "sending temp fetch req");
 }
 
 static void event_cb(lv_event_t *e) {
@@ -99,7 +105,18 @@ static void set_animation(lv_obj_t *bar) {
     lv_anim_start(&a);
 }
 
-lv_obj_t *temperature_bar_create(lv_obj_t *container, bool use_style,
+static lv_obj_t *temperature_fetch_btn_create(lv_obj_t *container) {
+    lv_obj_t *btn = lv_button_create(container);
+    lv_obj_t *lbl = lv_label_create(btn);
+    lv_label_set_text_static(lbl, LV_SYMBOL_REFRESH);
+    lv_obj_align(btn, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    lv_obj_add_event_cb(btn, btn_cb, LV_EVENT_CLICKED, NULL);
+
+    return btn;
+}
+
+static lv_obj_t *temperature_bar_create(lv_obj_t *container, bool use_style,
                                  bool animate) {
     lv_obj_t *new_bar = lv_bar_create(container);
 
@@ -150,14 +167,14 @@ void temperature_bar_animate_to_val(int32_t temp) {
     }
 }
 
-void temperature_bar_init(lv_display_t *disp, _lock_t *lock, bool use_style,
+void temperature_widget_init(lv_display_t *disp, _lock_t *lock, bool use_style,
                           bool animate) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
-    temperature_bar_init_on_container(scr, lock, use_style, animate);
+    temperature_widget_init_on_container(scr, lock, use_style, animate);
 }
 
-void temperature_bar_init_on_container(lv_obj_t *container, _lock_t *lock,
+void temperature_widget_init_on_container(lv_obj_t *container, _lock_t *lock,
                                        bool use_style, bool animate) {
     lvgl_lock = lock;
 
@@ -165,6 +182,7 @@ void temperature_bar_init_on_container(lv_obj_t *container, _lock_t *lock,
         _lock_acquire(lvgl_lock);
         if (!ui_bar) {
             ui_bar = temperature_bar_create(container, use_style, animate);
+            ui_btn = temperature_fetch_btn_create(container);
         }
         _lock_release(lvgl_lock);
     }
@@ -201,3 +219,25 @@ void temperature_bar_init_on_container(lv_obj_t *container, _lock_t *lock,
 //     set_animation(b1);
 //     set_animation(b2);
 // }
+//
+//
+    // for (i = 0; i < 10; i++) {
+    //     lv_obj_t *obj;
+    //     lv_obj_t *label;
+    //
+    //     /*Add items to the row*/
+    //     obj = lv_button_create(cont_row);
+    //     lv_obj_set_size(obj, 100, LV_PCT(100));
+    //
+    //     label = lv_label_create(obj);
+    //     lv_label_set_text_fmt(label, "Item: %" LV_PRIu32 "", i);
+    //     lv_obj_center(label);
+    //
+    //     /*Add items to the column*/
+    //     obj = lv_button_create(cont_col_1);
+    //     lv_obj_set_size(obj, LV_PCT(100), LV_SIZE_CONTENT);
+    //
+    //     label = lv_label_create(obj);
+    //     lv_label_set_text_fmt(label, "Item: %" LV_PRIu32, i);
+    //     lv_obj_center(label);
+    // }
