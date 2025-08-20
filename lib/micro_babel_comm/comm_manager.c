@@ -706,7 +706,7 @@ static void handle_network_down_event(event_t *ev)
 
   //Destroy UDP socket
   lwip_close(socket);
-  socket = 0;
+  socket = -1;
 
   //Close TCP connections and remove all information about participants
   while(address_book != NULL) {
