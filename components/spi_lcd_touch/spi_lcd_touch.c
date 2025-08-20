@@ -31,11 +31,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #include "esp_lcd_ili9488.h"
 #endif
 
-#if CONFIG_LCD_TOUCH_CONTROLLER_STMPE610
-#include "esp_lcd_touch_stmpe610.h"
-#elif CONFIG_LCD_TOUCH_CONTROLLER_XPT2046
 #include "esp_lcd_touch_xpt2046.h"
-#endif
 
 #define LCD_HOST SPI2_HOST
 
@@ -121,6 +117,12 @@ static esp_lcd_panel_io_handle_t io_handle = NULL;
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
 
+#ifdef CONFIG_LCD_CONTROLLER_ILI9341
+static const bool mirror_x = true;
+#elif CONFIG_LCD_CONTROLLER_ILI9488
+static const bool mirror_x = false;
+#endif
+
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
                                     esp_lcd_panel_io_event_data_t *edata,
                                     void *user_ctx) {
@@ -137,11 +139,6 @@ static void lvgl_port_update_callback(lv_display_t *disp) {
     esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
     lv_display_rotation_t rotation = lv_display_get_rotation(disp);
     event_t *event;
-
-    bool mirror_x = true;
-#ifdef CONFIG_LCD_CONTROLLER_ILI9488
-    mirror_x = false;
-#endif
 
     switch (rotation) {
     case LV_DISPLAY_ROTATION_0:
@@ -331,8 +328,6 @@ void init_display() {
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, false));
-    ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(panel_handle, false));
-    ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, false, false));
     ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_handle, 0, 0));
 
     // user can flush pre-defined pattern to the screen before we turn on the
@@ -383,11 +378,7 @@ void init_touch_spi() {
 void init_touch() {
     esp_lcd_panel_io_handle_t tp_io_handle = NULL;
     esp_lcd_panel_io_spi_config_t tp_io_config =
-#ifdef CONFIG_LCD_TOUCH_CONTROLLER_STMPE610
-        ESP_LCD_TOUCH_IO_SPI_STMPE610_CONFIG(TOUCH_CS);
-#elif CONFIG_LCD_TOUCH_CONTROLLER_XPT2046
         ESP_LCD_TOUCH_IO_SPI_XPT2046_CONFIG(TOUCH_CS);
-#endif
     // Attach the TOUCH to the SPI bus
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(
         (esp_lcd_spi_bus_handle_t)TOUCH_HOST, &tp_io_config, &tp_io_handle));
@@ -406,13 +397,8 @@ void init_touch() {
     };
     esp_lcd_touch_handle_t tp = NULL;
 
-#if CONFIG_LCD_TOUCH_CONTROLLER_STMPE610
-    ESP_LOGI(TAG, "Initialize touch controller STMPE610");
-    ESP_ERROR_CHECK(esp_lcd_touch_new_spi_stmpe610(tp_io_handle, &tp_cfg, &tp));
-#elif CONFIG_LCD_TOUCH_CONTROLLER_XPT2046
     ESP_LOGI(TAG, "Initialize touch controller XPT2046");
     ESP_ERROR_CHECK(esp_lcd_touch_new_spi_xpt2046(tp_io_handle, &tp_cfg, &tp));
-#endif
 
     static lv_indev_t *indev;
     indev = lv_indev_create(); // Input device driver (Touch)
@@ -441,6 +427,10 @@ void lcd_touch_task(void *pvParameters) {
     ESP_LOGI(TAG, "Initialize LVGL library");
     init_lvgl();
 
+#if CONFIG_LCD_ORIENTATION_LANDSCAPE
+    lv_display_set_rotation(display, LV_DISPLAY_ROTATION_270);
+#endif
+
 #if CONFIG_LCD_TOUCH_ENABLED
 
 #if CONFIG_LCD_CONTROLLER_ILI9488
@@ -458,11 +448,12 @@ void lcd_touch_task(void *pvParameters) {
                 LVGL_TASK_PRIORITY, NULL);
 
     ESP_LOGI(TAG, "Display LVGL Meter Widget");
-    // Lock the mutex due to the LVGL APIs are not thread-safe
-    _lock_acquire(&lvgl_api_lock);
-    // lvgl_demo_ui(display);
-    lvgl_temp_bar_init(display, &lvgl_api_lock);
-    _lock_release(&lvgl_api_lock);
+    lvgl_flex_layout_init(display, &lvgl_api_lock);
+
+    temperature_bar_init_on_container(lvgl_flex_layout_get_col(1),
+                                      &lvgl_api_lock, true, false);
+
+    temperature_bar_animate_to_val(38);
 
     vTaskDelete(NULL);
 }

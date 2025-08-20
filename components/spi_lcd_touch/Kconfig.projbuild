@@ -1,4 +1,4 @@
-menu "Example Configuration"
+menu "LCD / Touch Configuration"
 
     choice LCD_CONTROLLER
         prompt "LCD controller model"
@@ -14,34 +14,22 @@ menu "Example Configuration"
     endchoice
 
     config LCD_TOUCH_ENABLED
-        bool "Enable LCD touch"
+        bool "Enable LCD touch (XPT2046)"
         default n
         help
-            Enable this option if you wish to use display touch. You can select from touch controllers.
+            Enable this option if you wish to use display touch.
 
-    choice LCD_TOUCH_CONTROLLER
-        prompt "LCD touch controller model"
-        depends on LCD_TOUCH_ENABLED
-        default LCD_TOUCH_CONTROLLER_XPT2046
+    config LCD_ORIENTATION_LANDSCAPE
+        bool "Landscape orientation"
+        default n
         help
-            Select LCD touch controller model
-
-        config LCD_TOUCH_CONTROLLER_STMPE610
-            bool "STMPE610"
-            help
-                Touch controller STMPE610 connected via SPI.
-
-        config LCD_TOUCH_CONTROLLER_XPT2046
-            bool "XPT2046"
-            help
-                Touch controller XPT2046 connected via SPI.
-    endchoice
+            Enable this option if you wish to use the display in landscape mode.
 
     config LCD_MIRROR_Y
         int
-        default 1 if LCD_TOUCH_ENABLED && LCD_TOUCH_CONTROLLER_XPT2046
+        default 1 if LCD_TOUCH_ENABLED
         default 0
         help
-            This value is 1 if XPT2046 touch controller is selected, 0 otherwise.
+            This value is 1 if touch is enabled (due to the behavior of the XPT2046 controller), 0 otherwise.
 
 endmenu
