@@ -1,0 +1,1 @@
+include(proto_iot_control.cmake)

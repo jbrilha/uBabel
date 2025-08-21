@@ -1,7 +1,5 @@
 #pragma once
 
-// event_types.h
-
 #include <stdint.h>
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -26,6 +24,7 @@ typedef struct {
     uint8_t id[UUID_SIZE];
     ip4_addr_t address;
 } add_connection_request_t;
+
 
 #ifdef __cplusplus
 extern "C" {

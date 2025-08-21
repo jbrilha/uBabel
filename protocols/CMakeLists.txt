@@ -1,1 +1,2 @@
 add_subdirectory(proto_simple_overlay)
+add_subdirectory(proto_iot_control)

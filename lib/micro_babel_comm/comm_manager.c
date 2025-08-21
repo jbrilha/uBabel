@@ -141,6 +141,12 @@ static uint8_t my_id[16];
 
 static SemaphoreHandle_t comm_mutex;
 
+static QueueHandle_t connection_manager_queue;
+
+static void connection_manager_task(void *params) {
+
+}
+
 static int setup_tcp_socket()
 {
   int socket = lwip_socket(AF_INET, SOCK_STREAM, 0);
