@@ -56,6 +56,8 @@
 #define LWIP_DHCP_DOES_ACD_CHECK    0
 #define LWIP_SO_REUSE               1
 #define LWIP_ERRNO                  1   // so errno is set meaningfully
+#define LWIP_PROVIDE_ERRNO          0   // do that LWIP sets errno property
+#define LWIP_FCNTL                  0   // to allow setting tcp sockets non-blocking
 
 #ifndef NDEBUG
 #define LWIP_DEBUG                  1

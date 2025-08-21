@@ -127,9 +127,14 @@ int network_platform_connect_wifi(const char *ssid, const char *password,
 #endif
 }
 
+#ifdef BUILD_PICO
+extern cyw43_t cyw43_state;
+#endif
+
 void network_platform_disconnect_wifi(void) {
 #ifdef BUILD_PICO
-    cyw43_arch_wifi_connect_async(NULL, NULL, 0); // aka disconnect
+    cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+    //cyw43_arch_wifi_connect_async(NULL, NULL, 0); // aka disconnect
 #elif defined(BUILD_ESP32)
     esp_wifi_disconnect();
 #endif

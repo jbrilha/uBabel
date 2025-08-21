@@ -17,6 +17,7 @@
 #include "lwip/sockets.h"
 #include "lwip/timeouts.h"
 #include "lwip/udp.h"
+//#include "cyw43.h"   
 
 static const char *TAG = "NETWORK_MANAGER";
 
@@ -30,7 +31,6 @@ open_network_info_t *open_networks = NULL;
 
 bool connected = false;
 bool scan_in_progress = false;
-bool scan_has_completed = false;
 
 void add_open_network(const char *ssid, int rssi) {
     open_network_info_t *existing = open_networks;
@@ -174,7 +174,6 @@ void scan_for_open_networks() {
         if (!network_platform_scan_active()) {
             LOG_INFO(TAG, "Wi-Fi scan completed.\n");
             scan_in_progress = false;
-            scan_has_completed = true;
         } else {
             LOG_ERROR(TAG, "Scan did not complete in time.\n");
         }
@@ -190,7 +189,6 @@ void scan_for_open_networks() {
 
         LOG_INFO(TAG, "Starting Wi-Fi scan for open networks...\n");
         scan_in_progress = true;
-        scan_has_completed = false;
 
         // Start polling immediately
         for (int i = 0; i < 1000; ++i) { // ~1 second
@@ -204,7 +202,6 @@ void scan_for_open_networks() {
         if (!network_platform_scan_active()) {
             LOG_INFO(TAG, "Wi-Fi scan completed.\n");
             scan_in_progress = false;
-            scan_has_completed = true;
         } else {
             LOG_ERROR(TAG, "Scan did not complete in time.\n");
         }
@@ -240,6 +237,8 @@ void scan_for_open_networks() {
     }
 }
 **/
+
+extern struct netif *netif_default; 
 
 bool check_connectivity_via_ping_gateway() {
     struct netif *netif = netif_default;
@@ -351,7 +350,7 @@ void network_manager_task(void *params) {
     while (true) {
 
         if (!connected) {
-            LOG_INFO(TAG, "I am not connected, will try to connect, my status is: connected=%s scan_in_progress=%s scan_has_completed=%s", connected?"true":"false", scan_in_progress?"true":"false", scan_has_completed?"true":"false");
+            LOG_INFO(TAG, "I am not connected, will try to connect, my status is: connected=%s scan_in_progress=%s", connected?"true":"false", scan_in_progress?"true":"false");
             network_platform_enable_sta_mode();
 
             // I will try to connect
@@ -408,7 +407,7 @@ void network_manager_task(void *params) {
 
                 scan_for_open_networks();
 
-                if (scan_has_completed) {
+                if (!scan_in_progress) {
                     open_network_info_t *current = open_networks;
                     while (!connected && current != NULL) {
                         LOG_INFO(TAG, "Trying to connect to open network: %s\n",
@@ -466,15 +465,19 @@ void network_manager_task(void *params) {
                         free_open_networks();
                     }
                     scan_in_progress = false;
-                    scan_has_completed = false;
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(10));
-        } else {
+        } else { //Should be connected
             // Monitor link status check
-            int curr_status = network_platform_link_status();
+            
+            //int curr_status = network_platform_link_status();
 
-            if (curr_status != 1 || (!check_connectivity_via_ping_gateway() && !check_connectivity_via_dns())) {
+            //if (curr_status != 1 || (!check_connectivity_via_ping_gateway() && !check_connectivity_via_dns())) {
+            //if (curr_status != CYW43_LINK_UP && curr_status != CYW43_LINK_NONET) {
+            //const ip4_addr_t *ip = netif_ip4_addr(netif_default);
+            //if(!(netif_is_up(netif_default) && ip4_addr_isany(ip))) {
+            if(network_platform_link_status() != 1) {
                 LOG_INFO(TAG, "[EVENT] Wi-Fi link lost.\n");
 
                 network_event_t *evt = malloc(sizeof(network_event_t));

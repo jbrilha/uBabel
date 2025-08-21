@@ -60,6 +60,7 @@ static candidate_node_t* detach_node(uint8_t* id, candidate_node_t** head_of_lis
       candidate_node_t* target = *current;
       (*current) = (*current)->next;
       (*counter)--;
+      target->next = NULL;
       return target;
     }
     current = &((*current)->next);
@@ -135,11 +136,30 @@ static void simple_overlay_task() {
       event = NULL;
     }
 
+    candidate_node_t* c = neighbors;
+    LOG_INFO(TAG, "Neighbors: (%d)", n_neighbors);
+    while(c != NULL) {
+      LOG_INFO(TAG, "     %s", uuid_to_string(c->id));
+      c = c->next;
+    }
+    c = connecting;
+    LOG_INFO(TAG, "Connecting: (%d)", n_connecting);
+    while(c != NULL) {
+      LOG_INFO(TAG, "     %s", uuid_to_string(c->id));
+      c = c->next;
+    }
+    c = candidates;
+    LOG_INFO(TAG, "Candidates: (%d)",n_candidates);
+    while(c != NULL) {
+      LOG_INFO(TAG, "     %s", uuid_to_string(c->id));
+      c = c->next;
+    }
+
     LOG_INFO(TAG, "\nChecking number of neighbors. n_neighbors = %d, n_connecting = %d, TARGET_NEIGHBORS = %d, n_candidates = %d, condition is %s\n",n_neighbors, n_connecting, TARGET_NEIGHBORS, n_candidates, n_neighbors + n_connecting < TARGET_NEIGHBORS && n_candidates > 0 ? "true" : "false" );
 
     while(n_neighbors + n_connecting < TARGET_NEIGHBORS && n_candidates > 0) {
-      LOG_INFO(TAG, "trying to fill in neighbors (have %d candidates)");
-      candidate_node_t* c = detach_first(&candidates, &n_candidates);
+      LOG_INFO(TAG, "trying to fill in neighbors (have %d candidates)", n_candidates);
+      c = detach_first(&candidates, &n_candidates);
       if(c != NULL) {
         open_conection(c->id, SIMPLE_OVERLAY_PROTO_ID);
         add_node(c, &connecting, &n_connecting);
@@ -158,11 +178,16 @@ void simple_overlay_network_init() {
 
   if(!simple_overlay_queue) {
     LOG_ERROR(TAG, "Failed to initialize the queue for the simple overlay protocol");
+    return;
   }
 
   neighbors = NULL;
   connecting = NULL;
   candidates = NULL;
+
+  n_neighbors = 0;
+  n_connecting = 0;
+  n_candidates = 0;
 
   proto_manager_register_protocol(simple_overlay_queue, SIMPLE_OVERLAY_PROTO_ID);
   event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_DISCOVERED);
