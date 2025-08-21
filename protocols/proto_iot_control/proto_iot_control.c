@@ -1,5 +1,5 @@
 // proto_discovery.c
-#include "proto_simple_overlay.h"
+#include "protop_iot_control.h"
 #include "event_dispatcher.h"
 #include "proto_manager.h"
 #include "comm_manager.h"
@@ -12,16 +12,42 @@
 
 #define TAG "IoT Control Protocol"
 
+/**************** MESSAGE CODES TO INTERACT WITH BABEL ON RASPBERRY *******************/
+#define MSG_INIT 15001
+#define MSG_CMD 15002
+
 typedef struct device_node {
   uint8_t id[UUID_SIZE];
   struct candidate_node* next;
-} device;
+} device_t;
 
 static uint8_t id[UUID_SIZE];
 static QueueHandle_t iot_control_queue;
 
-static candidate_node_t* new;
-static candidate_node_t* established;
+static device_t* new;
+static device_t* established;
+
+static device_t* register_new_participant(event_t* neighbor_up_event) {
+  device_t* device = (device_t*) malloc(sizeof(device_t));
+  if(device_t != NULL) {
+    memcpy(device->id, (uint8_t*) neighbor_up_event->payload, UUID_SIZE);
+    device->next = new;
+    new = device;
+    return device;
+  }
+  return NULL;
+} 
+
+static void send_init_request(device_t* d) {
+  message_t* init_msg = create_empty_event(MSG_INIT, id, IOT_CONTROL_PROTO_ID, d->id, 0);
+  if(init_msg != NULL) {
+    event_t * ev = create_event(EVENT_TYPE_MESSAGE, MSG_INIT, init_msg, sizeof(message_t));
+    if(ev != NULL)
+      send_message(ev);
+    else
+      free_message(init_msg);
+  }
+}
 
 static void iot_control_protocol_task() {
   event_t *event;
@@ -35,7 +61,8 @@ static void iot_control_protocol_task() {
       {
         if (event->subtype == NOTIFICATION_NEIGHBOR_UP)
         {
-          event_t = 
+          device_t* d = register_new_participant(event);
+          send_init_request(d);
           
         } else if (event->subtype == NOTIFICATION_NEIGHBOR_DOWN) {
           

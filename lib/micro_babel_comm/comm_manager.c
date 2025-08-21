@@ -71,16 +71,6 @@ typedef struct discovery_message
   char buffer[MAX_UDP_PACKET_SIZE];
 } discovery_message_t;
 
-typedef struct message
-{
-  uint8_t sender_id[UUID_SIZE];
-  uint8_t destination_id[UUID_SIZE];
-  uint16_t message_type;
-  uint16_t message_size;
-  void *payload;
-  struct message *next;
-} message_t;
-
 static inline char *print_status(connection_status_t status)
 {
   switch (status)
@@ -142,10 +132,6 @@ static uint8_t my_id[16];
 static SemaphoreHandle_t comm_mutex;
 
 static QueueHandle_t connection_manager_queue;
-
-static void connection_manager_task(void *params) {
-
-}
 
 static int setup_tcp_socket()
 {
@@ -405,6 +391,88 @@ static int initialize_udp_socket()
   }
 
   return sock;
+}
+
+static int serialize_message_to_frame(const message_t* msg, uint8_t** out_buf, uint16_t* out_len)
+{
+    if (!msg || !out_buf || !out_len) return -1;
+    if (msg->payload_size > 0 && msg->payload == NULL) return -1;
+
+    // Compute payload-independent sizes
+    const uint16_t body_len =
+        2                         // message_type
+      + UUID_SIZE                 // sourceId
+      + 2                         // sourceProto
+      + UUID_SIZE                 // destId
+      + 2                         // destProto
+      + 2                         // payload_size
+      + msg->payload_size;        // payload
+
+    const uint16_t frame_len = 2 + body_len; // include the 2-byte length prefix
+
+    uint8_t* buf = (uint8_t*)malloc(frame_len);
+    if (!buf) return -1;
+
+    uint8_t* p = buf;
+
+    // 1) total_len (bytes AFTER this 2-byte field)
+    uint16_t n_total_len = htons(body_len);
+    memcpy(p, &n_total_len, 2); p += 2;
+
+    // 2) message_type
+    uint16_t n_msg_type = htons(msg->message_type);
+    memcpy(p, &n_msg_type, 2); p += 2;
+
+    // 3) sourceId (raw bytes)
+    memcpy(p, msg->sourceId, UUID_SIZE); p += UUID_SIZE;
+
+    // 4) sourceProto
+    uint16_t n_src_proto = htons(msg->sourceProto);
+    memcpy(p, &n_src_proto, 2); p += 2;
+
+    // 5) destId (raw bytes)
+    memcpy(p, msg->destId, UUID_SIZE); p += UUID_SIZE;
+
+    // 6) destProto
+    uint16_t n_dst_proto = htons(msg->destProto);
+    memcpy(p, &n_dst_proto, 2); p += 2;
+
+    // 7) payload_size
+    uint16_t n_plen = htons(msg->payload_size);
+    memcpy(p, &n_plen, 2); p += 2;
+
+    // 8) payload
+    if (msg->payload_size) {
+        memcpy(p, msg->payload, msg->payload_size);
+        p += msg->payload_size;
+    }
+
+    *out_buf = buf;
+    *out_len = frame_len;
+    return 0;
+}
+
+static void dispatchMessageToSocket(message_t* msg) {
+  node_register_t *target = find_participant_by_id(msg->destId);
+
+  if(target != NULL) {
+     uint8_t* buffer;
+     uint16_t buffer_len;
+
+     if(serialize_message_to_frame(msg, &buffer, &buffer_len) == 0) {
+        size_t sent = 0;
+        while (sent < buffer_len) {
+          int n = lwip_send(target->tcp_socket, buffer + sent, buffer_len - sent, 0);
+          if (n <= 0) { 
+            free(buffer); 
+            return; 
+          }
+          sent += (size_t)n;
+        }
+    
+      free(buffer);
+    }
+  }
 }
 
 static bool receive_from_tcp(node_register_t *participant, uint8_t *ptr, uint16_t *to_receive)
@@ -1000,9 +1068,12 @@ static void comm_manager_task(void *params)
           handle_network_down_event(event);
         }
       }
-      else if (event->type == EVENT_TYPE_MESSAGE && event->subtype == EVENT_MESSAGE_DISCOVERY)
+      else if (event->type == EVENT_TYPE_MESSAGE) 
       {
-        processDiscoveryMessage(event);
+        if (event->subtype == EVENT_MESSAGE_SEND)
+          dispatchMessageToSocket((message_t*) event->payload);
+        else if(event->subtype == event->subtype == EVENT_MESSAGE_DISCOVERY)
+          processDiscoveryMessage(event);
       }
       else if (event->type == EVENT_TYPE_REQUEST)
       {

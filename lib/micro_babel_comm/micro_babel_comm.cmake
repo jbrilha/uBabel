@@ -7,7 +7,6 @@ add_library(micro_babel_comm_manager INTERFACE)
 target_sources(micro_babel_comm_manager INTERFACE
   ${CMAKE_CURRENT_LIST_DIR}/comm_manager.c
   ${CMAKE_CURRENT_LIST_DIR}/message_parse.c
-  ${CMAKE_CURRENT_LIST_DIR}/message.c
 )
 
 target_include_directories(micro_babel_comm_manager INTERFACE ${CMAKE_CURRENT_LIST_DIR})

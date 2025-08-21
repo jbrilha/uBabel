@@ -42,9 +42,14 @@ void free_event(event_t* event) {
     if (event) {
         event->reference_counter--;
         if(event->reference_counter <= 0) {
-            if (event->payload) {
+            if(event->payload != NULL) {
+             if(event->type == EVENT_TYPE_MESSAGE && EVENT_MESSAGE_SEND) {
+                free_message(event->payload);
+             } else {     
                 free(event->payload);
-            }
+             }
+            }    
+            
             free(event);
         }
     }
@@ -85,4 +90,50 @@ bool is_event_payload_valid(const event_t* event) {
     return event && event->payload && event->payload_size > 0;
 }
 
+/****** Dealing with Messages ******/
 
+message_t* create_message(uint16_t message_type, uint8_t srcId[UUID_SIZE], uint16_t srcProto, uint8_t destId[UUID_SIZE], uint16_t destProto, uint8_t* payload, uint16_t payload_size) {
+    message_t* msg = (message_t*) malloc(sizeof(message_t));
+    
+    if(msg != NULL) {
+        msg->message_type = message_type;
+        memcpy(msg->sourceId, srcId, UUID_SIZE);
+        memcpy(msg->destId, destId, UUID_SIZE);
+        msg->sourceProto = srcProto;
+        msg->destProto = destProto;
+        msg->payload = payload;
+        msg->payload_size = payload_size;
+    }
+
+    return msg;
+}
+
+message_t* create_empty_message(uint16_t message_type, uint8_t srcId[UUID_SIZE], uint16_t srcProto, uint8_t destId[UUID_SIZE], uint16_t destProto) {
+    message_t* msg = (message_t*) malloc(sizeof(message_t));
+    
+    if(msg != NULL) {
+        msg->message_type = message_type;
+        memcpy(msg->sourceId, srcId, UUID_SIZE);
+        memcpy(msg->destId, destId, UUID_SIZE);
+        msg->sourceProto = srcProto;
+        msg->destProto = destProto;
+        msg->payload = NULL;
+        msg->payload_size = 0;
+    }
+
+    return msg;
+}
+
+void free_message(message_t* msg) {
+    if(msg->payload != NULL)
+        free(msg->payload);
+    free(msg);
+}
+
+uint16_t getFullMessageSize(message_t* msg) {
+    return msg->payload_size + 16 * 4 + UUID_SIZE * 2;
+}
+
+uint16_t computePayloadSize(uint16_t full_message_lenght) {
+    return full_message_lenght - (16 * 4 + UUID_SIZE * 2);
+}

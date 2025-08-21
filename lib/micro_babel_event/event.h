@@ -26,8 +26,11 @@ typedef uint8_t event_type_t;
 #define EVENT_SUBTYPE_NETWORK_UP 101
 #define EVENT_SUBTYPE_NETWORK_DOWN 102
 
+#define EVENT_MESSAGE_SEND 301
+
 #define MICRO_BABEL_SYSTEM_PROTOCOL 0
 
+#define UUID_SIZE 16
 
 // === Generic Event Structure ===
 typedef struct {
@@ -39,6 +42,16 @@ typedef struct {
     uint16_t proto_source;
     uint16_t proto_destination;
 } event_t;
+
+typedef struct {
+    uint16_t message_type;
+    uint8_t sourceId[UUID_SIZE];
+    uint16_t sourceProto;
+    uint8_t destId[UUID_SIZE];
+    uint16_t destProto;
+    uint8_t* payload;
+    uint16_t payload_size;
+} message_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,6 +66,13 @@ bool is_event_type(const event_t* event, event_type_t type);
 bool is_event_subtype(const event_t* event, event_subtype_t subtype);
 bool is_event_payload_empty(const event_t* event);
 void init_event_mutex();
+
+
+message_t* create_message(uint16_t message_type, uint8_t srcId[UUID_SIZE], uint16_t srcProto, uint8_t destId[UUID_SIZE], uint16_t destProto, uint8_t* payload, uint16_t payload_size);
+message_t* create_empty_message(uint16_t message_type, uint8_t srcId[UUID_SIZE], uint16_t srcProto, uint8_t destId[UUID_SIZE], uint16_t destProto);
+void free_message(message_t* msg);
+uint16_t getFullMessageSize(message_t* msg);
+uint16_t computePayloadSize(uint16_t full_message_lenght);
 
 #ifdef __cplusplus
 }
