@@ -1,5 +1,4 @@
 #include "lvgl_flex_layout.h"
-#include "esp_log.h"
 
 static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *ui_col_0 = NULL;
