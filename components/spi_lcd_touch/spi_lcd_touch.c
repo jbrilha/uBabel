@@ -1,9 +1,3 @@
-/*
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: CC0-1.0
- */
-
 #include "spi_lcd_touch.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
@@ -14,12 +8,13 @@
 #include "esp_lcd_types.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "lvgl_ui.h"
 #include <stdio.h>
 #include <sys/lock.h>
 #include <sys/param.h>
 #include <unistd.h>
 
+#include "lvgl_ui.h"
+#include "ui_event_manager.h"
 #include "event.h"
 #include "event_dispatcher.h"
 
@@ -145,49 +140,49 @@ static void lvgl_port_update_callback(lv_display_t *disp) {
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, false);
         esp_lcd_panel_mirror(panel_handle, mirror_x, false);
-        if (last_rotation != rotation) {
-            event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_0,
-                                 NULL, 0);
-            if (event) {
-                event_dispatcher_post(event);
-            }
-        }
+        // if (last_rotation != rotation) {
+        //     event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_0,
+        //                          NULL, 0);
+        //     if (event) {
+        //         event_dispatcher_post(event);
+        //     }
+        // }
         break;
     case LV_DISPLAY_ROTATION_90:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, true);
         esp_lcd_panel_mirror(panel_handle, mirror_x, true);
-        if (last_rotation != rotation) {
-            event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_90,
-                                 NULL, 0);
-            if (event) {
-                event_dispatcher_post(event);
-            }
-        }
+        // if (last_rotation != rotation) {
+        //     event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_90,
+        //                          NULL, 0);
+        //     if (event) {
+        //         event_dispatcher_post(event);
+        //     }
+        // }
         break;
     case LV_DISPLAY_ROTATION_180:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, false);
         esp_lcd_panel_mirror(panel_handle, !mirror_x, true);
-        if (last_rotation != rotation) {
-            event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_180,
-                                 NULL, 0);
-            if (event) {
-                event_dispatcher_post(event);
-            }
-        }
+        // if (last_rotation != rotation) {
+        //     event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_180,
+        //                          NULL, 0);
+        //     if (event) {
+        //         event_dispatcher_post(event);
+        //     }
+        // }
         break;
     case LV_DISPLAY_ROTATION_270:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, true);
         esp_lcd_panel_mirror(panel_handle, !mirror_x, false);
-        if (last_rotation != rotation) {
-            event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_270,
-                                 NULL, 0);
-            if (event) {
-                event_dispatcher_post(event);
-            }
-        }
+        // if (last_rotation != rotation) {
+        //     event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_270,
+        //                          NULL, 0);
+        //     if (event) {
+        //         event_dispatcher_post(event);
+        //     }
+        // }
         break;
     }
 
@@ -409,7 +404,7 @@ void init_touch() {
 }
 #endif
 
-void lcd_touch_task(void *pvParameters) {
+void lcd_init_task(void *pvParameters) {
     ESP_LOGI(TAG, "Turn off LCD backlight");
     gpio_config_t bk_gpio_config = {.mode = GPIO_MODE_OUTPUT,
                                     .pin_bit_mask = 1ULL << BK_LIGHT};
@@ -453,6 +448,8 @@ void lcd_touch_task(void *pvParameters) {
     messenger_widget_init_on_container(lvgl_flex_layout_get_col(0), &lvgl_api_lock);
     temperature_widget_init_on_container(lvgl_flex_layout_get_col(1),
                                          &lvgl_api_lock, true, false);
+
+    ui_event_manager_init();
 
     vTaskDelete(NULL);
 }
