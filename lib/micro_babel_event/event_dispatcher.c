@@ -193,6 +193,8 @@ bool event_dispatcher_post(event_t *event)
 
 void event_dispatcher_task(void *params)
 {
+    init_event_mutex();
+
     event_t *event;
     while (true)
     {
@@ -251,7 +253,6 @@ void event_dispatcher_task(void *params)
 
 bool event_dispatcher_init(void)
 {
-    init_event_mutex();
     dispatcher_queue = xQueueCreate(DISPATCHER_QUEUE_LENGTH, sizeof(event_t *));
     if (!dispatcher_queue)
     {
@@ -278,5 +279,5 @@ bool event_dispatcher_init(void)
         subscriptions[i].subtypes = NULL; // Initialize subtypes to NULL
     }
 
-    return xTaskCreate(event_dispatcher_task, "Dispatcher", 1024, NULL, 2, NULL) == pdPASS;
+    return xTaskCreate(event_dispatcher_task, "Dispatcher", 4096, NULL, 2, NULL) == pdPASS;
 }
