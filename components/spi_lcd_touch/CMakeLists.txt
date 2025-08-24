@@ -1,12 +1,4 @@
-set(COMP_SRCS 
-    spi_lcd_touch.c
-    lvgl_demo_ui.c
-    lvgl_flex_layout.c
-    lvgl_temperature_widget.c
-    lvgl_messenger_widget.c
-)
-
-idf_component_register(SRCS ${COMP_SRCS}
-                        INCLUDE_DIRS "." "./include"
-                        REQUIRES micro_babel_event
+idf_component_register(SRCS spi_lcd_touch.c
+                        INCLUDE_DIRS "."
+                        REQUIRES esp_timer lvgl_ui micro_babel_event ui_event_manager esp_lcd_ili9342
 )

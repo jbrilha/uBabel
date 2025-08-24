@@ -3,7 +3,7 @@
 // include the hardware abstraction layer
 #include "esp_hal.h"
 
-#include "esp_lora.h"
+#include "m5_lora.h"
 
 #define LORA_SENDER_TASK_STACK_SIZE (4 * 1024)
 #define LORA_SENDER_TASK_PRIORITY 2

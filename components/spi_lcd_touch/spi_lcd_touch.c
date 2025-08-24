@@ -1,9 +1,3 @@
-/*
- * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: CC0-1.0
- */
-
 #include "spi_lcd_touch.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
@@ -14,7 +8,6 @@
 #include "esp_lcd_types.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "lvgl_ui.h"
 #include <stdio.h>
 #include <sys/lock.h>
 #include <sys/param.h>
@@ -22,11 +15,22 @@
 
 #include "event.h"
 #include "event_dispatcher.h"
+#include "lvgl_ui.h"
+#include "misc/lv_color.h"
+#include "ui_event_manager.h"
 
 static const char *TAG = "SPI_LCD_TOUCH";
 
+#ifdef M5STACK_CORE_BASIC
+#define CONFIG_LCD_CONTROLLER_ILI9488 0
+#define CONFIG_LCD_CONTROLLER_ILI9341 0
+#define CONFIG_LCD_CONTROLLER_ILI9342 1
+#endif
+
 #if CONFIG_LCD_CONTROLLER_ILI9341
 #include "esp_lcd_ili9341.h"
+#elif CONFIG_LCD_CONTROLLER_ILI9342
+#include "esp_lcd_ili9342.h"
 #elif CONFIG_LCD_CONTROLLER_ILI9488
 #include "esp_lcd_ili9488.h"
 #endif
@@ -39,15 +43,19 @@ static const char *TAG = "SPI_LCD_TOUCH";
 // can be the same for this display
 #define TOUCH_HOST LCD_HOST
 
-#ifndef M5STACK_CORE_BASIC
 #define LCD_H_RES 240
 #define LCD_V_RES 320
-#else
-#define LCD_H_RES 320
-#define LCD_V_RES 240
-#endif
 
 #define LCD_PIXEL_CLOCK_HZ (20 * 1000 * 1000)
+#define BITS_PER_PIXEL 16
+
+#elif CONFIG_LCD_CONTROLLER_ILI9342
+#define TOUCH_HOST LCD_HOST
+
+#define LCD_H_RES 320
+#define LCD_V_RES 240
+
+#define LCD_PIXEL_CLOCK_HZ (40 * 1000 * 1000)
 #define BITS_PER_PIXEL 16
 
 #elif CONFIG_LCD_CONTROLLER_ILI9488
@@ -70,7 +78,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_MOSI 23
 #define LCD_CLK 18
 #define BK_LIGHT 32
-#define LCD_MISO 23
+#define LCD_MISO -1
 // no touch capabilities on the Core Basic :(
 #define CONFIG_LCD_TOUCH_ENABLED 0
 #elif defined(CONFIG_IDF_TARGET_ESP32)
@@ -117,9 +125,10 @@ static esp_lcd_panel_io_handle_t io_handle = NULL;
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
 
-#ifdef CONFIG_LCD_CONTROLLER_ILI9341
+#if CONFIG_LCD_CONTROLLER_ILI9341
 static const bool mirror_x = true;
-#elif CONFIG_LCD_CONTROLLER_ILI9488
+#elif CONFIG_LCD_CONTROLLER_ILI9488 || CONFIG_LCD_CONTROLLER_ILI9342
+
 static const bool mirror_x = false;
 #endif
 
@@ -138,56 +147,27 @@ int last_rotation;
 static void lvgl_port_update_callback(lv_display_t *disp) {
     esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
     lv_display_rotation_t rotation = lv_display_get_rotation(disp);
-    event_t *event;
 
     switch (rotation) {
     case LV_DISPLAY_ROTATION_0:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, false);
         esp_lcd_panel_mirror(panel_handle, mirror_x, false);
-        if (last_rotation != rotation) {
-            event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_0,
-                                 NULL, 0);
-            if (event) {
-                event_dispatcher_post(event);
-            }
-        }
         break;
     case LV_DISPLAY_ROTATION_90:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, true);
         esp_lcd_panel_mirror(panel_handle, mirror_x, true);
-        if (last_rotation != rotation) {
-            event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_90,
-                                 NULL, 0);
-            if (event) {
-                event_dispatcher_post(event);
-            }
-        }
         break;
     case LV_DISPLAY_ROTATION_180:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, false);
         esp_lcd_panel_mirror(panel_handle, !mirror_x, true);
-        if (last_rotation != rotation) {
-            event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_180,
-                                 NULL, 0);
-            if (event) {
-                event_dispatcher_post(event);
-            }
-        }
         break;
     case LV_DISPLAY_ROTATION_270:
         // Rotate LCD display
         esp_lcd_panel_swap_xy(panel_handle, true);
         esp_lcd_panel_mirror(panel_handle, !mirror_x, false);
-        if (last_rotation != rotation) {
-            event = create_event(EVENT_TYPE_NOTIFICATION, EVENT_ROTATION_270,
-                                 NULL, 0);
-            if (event) {
-                event_dispatcher_post(event);
-            }
-        }
         break;
     }
 
@@ -203,7 +183,7 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area,
     int offsety1 = area->y1;
     int offsety2 = area->y2;
     // because SPI LCD is big-endian, we need to swap the RGB bytes order
-#if CONFIG_LCD_CONTROLLER_ILI9341
+#if CONFIG_LCD_CONTROLLER_ILI9341 || CONFIG_LCD_CONTROLLER_ILI9342
     lv_draw_sw_rgb565_swap(px_map, (offsetx2 + 1 - offsetx1) *
                                        (offsety2 + 1 - offsety1));
 #endif
@@ -288,7 +268,10 @@ void init_lcd_spi() {
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = LCD_H_RES * 80 * sizeof(uint16_t),
-        .flags = SPICOMMON_BUSFLAG_SCLK | SPICOMMON_BUSFLAG_MISO |
+        .flags = SPICOMMON_BUSFLAG_SCLK |
+#ifndef M5STACK_CORE_BASIC
+                 SPICOMMON_BUSFLAG_MISO |
+#endif
                  SPICOMMON_BUSFLAG_MOSI | SPICOMMON_BUSFLAG_MASTER,
         .intr_flags = ESP_INTR_FLAG_LOWMED | ESP_INTR_FLAG_IRAM};
     ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
@@ -319,6 +302,10 @@ void init_display() {
     ESP_LOGI(TAG, "Install ILI9341 panel driver");
     ESP_ERROR_CHECK(
         esp_lcd_new_panel_ili9341(io_handle, &panel_config, &panel_handle));
+#elif CONFIG_LCD_CONTROLLER_ILI9342
+    ESP_LOGI(TAG, "Install ILI9342 panel driver");
+    ESP_ERROR_CHECK(
+        esp_lcd_new_panel_ili9342(io_handle, &panel_config, &panel_handle));
 #elif CONFIG_LCD_CONTROLLER_ILI9488
     ESP_LOGI(TAG, "Install ILI9488 panel driver");
     ESP_ERROR_CHECK(esp_lcd_new_panel_ili9488(io_handle, &panel_config,
@@ -327,7 +314,9 @@ void init_display() {
 
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, false));
+#if CONFIG_LCD_CONTROLLER_ILI9342
+    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, true));
+#endif
     ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_handle, 0, 0));
 
     // user can flush pre-defined pattern to the screen before we turn on the
@@ -409,7 +398,7 @@ void init_touch() {
 }
 #endif
 
-void lcd_touch_task(void *pvParameters) {
+void lcd_init_task(void *pvParameters) {
     ESP_LOGI(TAG, "Turn off LCD backlight");
     gpio_config_t bk_gpio_config = {.mode = GPIO_MODE_OUTPUT,
                                     .pin_bit_mask = 1ULL << BK_LIGHT};
@@ -450,9 +439,12 @@ void lcd_touch_task(void *pvParameters) {
     ESP_LOGI(TAG, "Display LVGL Meter Widget");
     lvgl_flex_layout_init(display, &lvgl_api_lock);
 
-    messenger_widget_init_on_container(lvgl_flex_layout_get_col(0), &lvgl_api_lock);
+    messenger_widget_init_on_container(lvgl_flex_layout_get_col(0),
+                                       &lvgl_api_lock);
     temperature_widget_init_on_container(lvgl_flex_layout_get_col(1),
                                          &lvgl_api_lock, true, false);
+
+    ui_event_manager_init();
 
     vTaskDelete(NULL);
 }

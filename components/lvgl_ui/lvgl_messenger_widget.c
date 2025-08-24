@@ -1,5 +1,4 @@
 #include "lvgl_messenger_widget.h"
-#include "esp_log.h"
 #include "misc/lv_style.h"
 
 static _lock_t *lvgl_lock = NULL;
@@ -8,7 +7,6 @@ static lv_obj_t *ui_btn = NULL;
 
 static void btn_cb(lv_event_t *e) {
     // todo send message via event queue
-    ESP_LOGI("A", "sending message");
 }
 
 static lv_obj_t *send_msg_btn_create(lv_obj_t *container) {

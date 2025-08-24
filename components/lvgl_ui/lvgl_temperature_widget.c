@@ -1,4 +1,3 @@
-#include "esp_log.h"
 #include "lvgl_temperature_widget.h"
 
 #define BAR_MIN 0
@@ -28,7 +27,6 @@ static void init_style(lv_style_t *style) {
 
 static void btn_cb(lv_event_t *e) {
     // todo send request via event queue
-    ESP_LOGI("A", "sending temp fetch req");
 }
 
 static void event_cb(lv_event_t *e) {
@@ -41,7 +39,6 @@ static void event_cb(lv_event_t *e) {
     char buf[8];
     int val = lv_bar_get_value(obj);
     lv_snprintf(buf, sizeof(buf), "%d", val);
-    // ESP_LOGI("A", "val: %d", val);
 
     lv_point_t txt_size;
     lv_text_get_size(&txt_size, buf, label_dsc.font, label_dsc.letter_space,
