@@ -1,6 +1,6 @@
 #pragma once
 
-#define IOT_CONTROL_PROTO_ID 15000
+#define IOT_CONTROL_PROTO_ID 17000
 
 #ifdef __cplusplus
 extern "C" {

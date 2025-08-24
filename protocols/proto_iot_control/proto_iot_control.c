@@ -13,8 +13,8 @@
 #define TAG "IoT Control Protocol"
 
 /**************** MESSAGE CODES TO INTERACT WITH BABEL ON RASPBERRY *******************/
-#define MSG_INIT 15001
-#define MSG_CMD 15002
+#define MSG_INIT 17001
+#define MSG_CMD 17002
 
 typedef struct device_node {
   uint8_t id[UUID_SIZE];

@@ -47,6 +47,8 @@
 
 #define INITIAL_PROTOCOL_CAPACITY 3
 
+#define HANDSHAKE_MESSAGE_ID 0
+
 typedef enum peer_source
 {
   DISCOVERY = 0,
@@ -653,6 +655,22 @@ static void attempt_to_extablish_connection(uint8_t *node_id)
       if (result == 0) // IMMEDIATLY CONNECTED
       {
         target->status = CONNECTED;
+
+        //Send HandshakeMessage
+        message_t* msg = create_message(HANDSHAKE_MESSAGE_ID,my_id,0,target->id,MICRO_BABEL_DISCOVERY_PROTO);
+        if(msg != NULL) {
+          event_t* msg_send_evt = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, msg, sizeof(message_t);
+          if(msg_send_evt != NULL) {
+            msg_send_evt->reference_counter++;
+            if(xQueueSend(proto_discovery_queue, &msg_send_evt, portMAX_DELAY) != pdPASS) {
+              free_event(msg_send_evt);
+            } 
+          } else {
+            //Could not create the event so delete the payload
+            free_message(msg);
+          }
+        }
+
         notification = create_event(EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_CONNECTED, id, UUID_SIZE);
       }
     }
