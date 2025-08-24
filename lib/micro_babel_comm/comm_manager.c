@@ -815,8 +815,8 @@ static void socket_manager_task(void *params)
         msg = malloc(sizeof(discovery_message_t));
         if (msg == NULL)
         {
-          printf("[proto_discovery:] Could not allocate memory for a message buffer.");
-          vTaskDelete(NULL);
+          LOG_ERROR(TAG, "Could not allocate memory for a message buffer.");
+          continue;
         }
         slen = sizeof(msg->sender_addr);
         msg->messagelenght = lwip_recvfrom(socket, msg->buffer, MAX_UDP_PACKET_SIZE, 0,
@@ -824,8 +824,14 @@ static void socket_manager_task(void *params)
         if (msg->messagelenght >= 0)
         {
           event_t *ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_DISCOVERY, msg, sizeof(discovery_message_t));
-          ev->reference_counter++;
-          xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY);
+          if(ev != NULL) {
+            ev->reference_counter++;
+            xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY);
+          } else {
+            free(msg);
+            LOG_ERROR(TAG, "Could not allocate memory for an event.");
+            continue;
+          }
         }
         else
         {
@@ -1001,7 +1007,7 @@ static void processDiscoveryMessage(event_t *ev)
   // Convert IP to human-readable string
   inet_ntop(AF_INET, &(((discovery_message_t *)ev->payload)->sender_addr.sin_addr), ip_str, sizeof(ip_str));
 
-  printf("Message from %s:%d | Length: %u bytes\n",
+  LOG_INFO(TAG, "Message from %s:%d | Length: %u bytes\n",
          ip_str,
          ntohs(((discovery_message_t *)ev->payload)->sender_addr.sin_port),
          (((discovery_message_t *)ev->payload)->messagelenght));
@@ -1091,7 +1097,7 @@ static void comm_manager_task(void *params)
       {
         if (event->subtype == EVENT_MESSAGE_SEND)
           dispatchMessageToSocket((message_t*) event->payload);
-        else if(event->subtype == event->subtype == EVENT_MESSAGE_DISCOVERY)
+        else if(event->subtype == EVENT_MESSAGE_DISCOVERY)
           processDiscoveryMessage(event);
       }
       else if (event->type == EVENT_TYPE_REQUEST)
