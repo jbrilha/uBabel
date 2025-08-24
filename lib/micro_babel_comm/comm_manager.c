@@ -47,6 +47,7 @@
 
 #define INITIAL_PROTOCOL_CAPACITY 3
 
+#define MICRO_BABEL_DISCOVERY_PROTO 31001
 #define HANDSHAKE_MESSAGE_ID 0
 
 typedef enum peer_source
@@ -657,9 +658,9 @@ static void attempt_to_extablish_connection(uint8_t *node_id)
         target->status = CONNECTED;
 
         //Send HandshakeMessage
-        message_t* msg = create_message(HANDSHAKE_MESSAGE_ID,my_id,0,target->id,MICRO_BABEL_DISCOVERY_PROTO);
+        message_t* msg = create_empty_message(HANDSHAKE_MESSAGE_ID,my_id,0,target->id,MICRO_BABEL_DISCOVERY_PROTO);
         if(msg != NULL) {
-          event_t* msg_send_evt = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, msg, sizeof(message_t);
+          event_t* msg_send_evt = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, msg, sizeof(message_t));
           if(msg_send_evt != NULL) {
             msg_send_evt->reference_counter++;
             if(xQueueSend(proto_discovery_queue, &msg_send_evt, portMAX_DELAY) != pdPASS) {
