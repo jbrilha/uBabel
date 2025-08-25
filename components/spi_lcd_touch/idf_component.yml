@@ -4,3 +4,4 @@ dependencies:
   esp_lcd_touch_stmpe610: ^1.0
   atanisoft/esp_lcd_ili9488: ^1.0.11
   atanisoft/esp_lcd_touch_xpt2046: 1.0.5
+  jbrilha/esp_lcd_ili9342: ^1.0.0
