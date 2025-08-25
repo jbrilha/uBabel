@@ -716,7 +716,7 @@ static void attempt_to_close_connection(uint8_t *node_id)
 
 static void socket_manager_task(void *params)
 {
-  printf("[proto_discovery:] starting to receive multicast messages in IP: %s\n", (char *)params);
+  LOG_INFO(TAG, "Starting to receive multicast messages in IP: %s\n", (char *)params);
 
   // Start by cleaning up from a previous execution:
   if (socket >= 0)
@@ -794,7 +794,6 @@ static void socket_manager_task(void *params)
       xSemaphoreTake(comm_mutex, portMAX_DELAY);
       // Check TCP connections
       current = address_book;
-      ;
       while (current != NULL)
       {
         if (current->status == CONNECTED && FD_ISSET(current->tcp_socket, &rfds))
@@ -827,8 +826,10 @@ static void socket_manager_task(void *params)
           if(ev != NULL) {
             ev->reference_counter++;
             xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY);
+            msg = NULL;
           } else {
             free(msg);
+            msg = NULL;
             LOG_ERROR(TAG, "Could not allocate memory for an event.");
             continue;
           }
@@ -838,6 +839,7 @@ static void socket_manager_task(void *params)
           int e = errno;
           printf("Recvfrom error: %d\n", e);
           free(msg);
+          msg = NULL;
         }
       }
     }
@@ -1040,7 +1042,7 @@ static void processDiscoveryMessage(event_t *ev)
         p = register_new_participant_info(&msg);
         if (p != NULL)
         {
-          uint8_t *id = malloc(UUID_SIZE);
+          uint8_t *id = (uint8_t*) malloc(UUID_SIZE);
           if (id == NULL)
           {
             LOG_ERROR(TAG, "Could not allocate space for node id on EVENT_NOTIFICAITON_NODE_DISCOVERED");
@@ -1052,10 +1054,10 @@ static void processDiscoveryMessage(event_t *ev)
           {
             free(id);
             LOG_ERROR(TAG, "Could not allocate space for event EVENT_NOTIFICAITON_NODE_DISCOVERED");
-            return;
+          } else {
+            LOG_INFO(TAG, "Emitting NOTIFICATION NODE DISCOVERED for %s", uuid_to_string(id));
+            event_dispatcher_post(e);
           }
-          LOG_INFO(TAG, "Emitting NOTIFICATION NODE DISCOVERED for %s", uuid_to_string(id));
-          event_dispatcher_post(e);
         }
       }
       else

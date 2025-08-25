@@ -26,8 +26,8 @@ event_t* create_event_with_destination(event_type_t type, event_subtype_t subtyp
     }
 
     event->reference_counter = 0;
-    event->proto_source = protocol_id;
-    event->proto_destination = MICRO_BABEL_SYSTEM_PROTOCOL;
+    event->proto_source = MICRO_BABEL_SYSTEM_PROTOCOL;
+    event->proto_destination = protocol_id;
     
     return event;
 }
@@ -43,7 +43,7 @@ void free_event(event_t* event) {
         event->reference_counter--;
         if(event->reference_counter <= 0) {
             if(event->payload != NULL) {
-             if(event->type == EVENT_TYPE_MESSAGE && EVENT_MESSAGE_SEND) {
+             if(event->type == EVENT_TYPE_MESSAGE && event->subtype == EVENT_MESSAGE_SEND) {
                 free_message(event->payload);
              } else {     
                 free(event->payload);

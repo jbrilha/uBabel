@@ -134,9 +134,9 @@ void scroll_task(__unused void *params) {
                     sprintf(text, "Neighbor down: %s", uuid_to_string((uint8_t*) event->payload));
                     pico_scroll_scroll_text(text, 255, 10);
                 }
-
-                free_event(event);
             }
+
+            free_event(event);
         }
     }
 }
@@ -178,8 +178,9 @@ void unicorn_task(__unused void *params) {
                 } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
                     button_y = !button_y;
                 }
-                free_event(event); // Free the event memory
             }
+
+            free_event(event); // Free the event memory
         } 
 
         i++;

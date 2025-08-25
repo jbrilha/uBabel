@@ -93,7 +93,6 @@ static void simple_overlay_task() {
         {
           LOG_INFO(TAG, "Received a NODE DISCOVERED NOTIFICATION");
           if(!check_node_exists((uint8_t*) event->payload)) {  
-
             candidate_node_t* node = (candidate_node_t*) malloc(sizeof(candidate_node_t));
             if(node != NULL) {
               memcpy(node->id, event->payload, UUID_SIZE);
