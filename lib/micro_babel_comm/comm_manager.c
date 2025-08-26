@@ -787,7 +787,7 @@ static void socket_manager_task(void *params)
     tv.tv_usec = (remaining % 1000) * 1000;
     LOG_INFO(TAG, "Entering Select :: Timeout for select is of %d miliseconds (%d seconds and %d useconds)", remaining, tv.tv_sec, tv.tv_usec);
     n = lwip_select(highest_socket, &rfds, NULL, NULL, &tv);
-    LOG_INFO(TAG, "Got out of select with %d active sockets", n);
+    LOG_INFO(TAG, "Got out of select with %d active sockets (I am %s)", n, uuid_to_string(my_id));
 
     if (n > 0)
     {
