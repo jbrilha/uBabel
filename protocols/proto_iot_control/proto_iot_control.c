@@ -112,7 +112,7 @@ static void iot_control_protocol_task() {
         {
           LOG_INFO(TAG, "Neighbor up notification for %s, will register the participant.", uuid_to_string(event->payload));
           device_node_t* d = register_new_participant(event);
-          if)d != NULL) {
+          if(d != NULL) {
             LOG_INFO(TAG, "Sending the init request to the new candidate");
             send_init_request(d);
           } else {
