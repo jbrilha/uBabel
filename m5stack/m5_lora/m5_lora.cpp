@@ -22,18 +22,13 @@
 
 // LoRa Parameters Config
 // #define LORA_FREQ     433E6
-#define LORA_FREQ 868E6
+#define LORA_FREQ 868
 #define LORA_SF 12
 #define LORA_BW 125E3
 #define LORA_TX_POWER 17
 EspHal *hal = new EspHal(LORA_SCLK, LORA_MISO, LORA_MOSI);
 
-// now we can create the radio module
-// #define NSS_PIN   18
-// #define DIO0_PIN  26
-// #define NRST_PIN  14
-#define DIO1_PIN 33
-SX1276 radio = new Module(hal, CS_PIN, IRQ_PIN, RST_PIN, DIO1_PIN);
+SX1276 radio = new Module(hal, CS_PIN, IRQ_PIN, RST_PIN);
 
 static const char *TAG = "ESP_LORA";
 
@@ -50,18 +45,25 @@ void init_lora() {
     }
     ESP_LOGI(TAG, "success!\n");
 
+    radio.setOutputPower(LORA_TX_POWER);
+    radio.setBandwidth(LORA_BW);
+    radio.setSpreadingFactor(LORA_SF);
+
+    radio.setCRC(true);
+
     lora_initialized = true;
 }
 
 void sender_task(void *pvParameters) {
     int state;
 
-    radio.setCRC(true);
-
+    int i = 0;
+    char str[64];
     for (;;) {
-        ESP_LOGI(TAG, "[SX1276] Transmitting packet ... ");
+        snprintf(str, sizeof(str), "Hello world! %d", i++);
+        ESP_LOGI(TAG, "[SX1276] Transmitting packet %d... ", i);
 
-        state = radio.transmit("Hello World!");
+        state = radio.transmit(str);
         if (state == RADIOLIB_ERR_NONE) {
             ESP_LOGI(TAG, "successfully transmitted LoRa packet");
 
