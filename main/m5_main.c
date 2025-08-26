@@ -33,15 +33,16 @@ void app_main(void) {
 
     event_dispatcher_init();
 
-    // start_lora_sender_task();
-    start_lora_receiver_task();
+    // LORA INIT MUST COME BEFORE LCD INIT due to SPI shenanigans
+    start_lora_sender_task();
+    // start_lora_receiver_task();
 
-    // xTaskCreate(lcd_init_task,   // Task function
-    //             "lcd_init_task", // Task name
-    //             4096,            // Stack size in words
-    //             NULL,            // Task parameters
-    //             1,               // Priority
-    //             NULL             // Task handle
-    // );
+    xTaskCreate(lcd_init_task,   // Task function
+                "lcd_init_task", // Task name
+                4096,            // Stack size in words
+                NULL,            // Task parameters
+                1,               // Priority
+                NULL             // Task handle
+    );
 
 }

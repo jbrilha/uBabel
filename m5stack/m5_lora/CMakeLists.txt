@@ -1,4 +1,4 @@
-idf_component_register(SRCS "m5_lora.cpp"
+idf_component_register(SRCS "m5_lora.c"
                         INCLUDE_DIRS "." "../../shared"
-                        REQUIRES radiolib esp_timer driver
+                        REQUIRES esp_timer driver
 )
