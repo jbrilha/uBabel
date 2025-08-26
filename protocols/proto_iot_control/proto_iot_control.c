@@ -89,10 +89,12 @@ static void send_init_request(device_node_t* d) {
   message_t* init_msg = create_empty_message(MSG_INIT, id, IOT_CONTROL_PROTO_ID, d->id, IOT_CONTROL_PROTO_ID);
   if(init_msg != NULL) {
     event_t * ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, init_msg, sizeof(message_t));
-    if(ev != NULL)
-      send_message(ev, d->id);
-    else
+    if(ev != NULL) {
+      send_message(ev, init_msg->destId);
+      LOG_INFO(TAG, "Sent the init request to %s", uuid_to_string(init_msg->destId));
+    } else {
       free_message(init_msg);
+    }
   }
 }
 
@@ -108,8 +110,14 @@ static void iot_control_protocol_task() {
       {
         if (event->subtype == NOTIFICATION_NEIGHBOR_UP)
         {
+          LOG_INFO(TAG, "Neighbor up notification for %s, will register the participant.", uuid_to_string(event->payload));
           device_node_t* d = register_new_participant(event);
-          send_init_request(d);
+          if)d != NULL) {
+            LOG_INFO(TAG, "Sending the init request to the new candidate");
+            send_init_request(d);
+          } else {
+            LOG_INFO(TAG, "Could not sent the request to the candadiate.");
+          }
           
         } else if (event->subtype == NOTIFICATION_NEIGHBOR_DOWN) {
           bool removed = remove_participant(event);
