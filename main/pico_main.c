@@ -25,6 +25,7 @@
 #include "pico_buttons.h"
 #include "common_events.h"
 #include "proto_simple_overlay.h"
+#include "proto_iot_control.h"
 
 #include "tcp.h"
 #include "udp.h"
