@@ -34,7 +34,7 @@ static device_node_t* new;
 static device_node_t* established;
 
 static device_node_t* register_new_participant(event_t* neighbor_up_event) {
-  device_node_t* device = (device_node_t*) malloc(sizeof(device_t));
+  device_node_t* device = (device_node_t*) malloc(sizeof(device_node_t));
   if(device != NULL) {
     memcpy(device->id, (uint8_t*) neighbor_up_event->payload, UUID_SIZE);
     device->devices = NULL;
@@ -59,6 +59,9 @@ static bool remove_participant(event_t* neighbor_down_event) {
         free(aux);
         aux = (*current)->devices;
       }
+      device_node_t* rem = (*current);
+      (*current) = (*current)->next;
+      free(rem);
       break;
     }
     current = &((*current)->next);
@@ -77,6 +80,9 @@ static bool remove_participant(event_t* neighbor_down_event) {
           free(aux);
           aux = (*current)->devices;
         }
+        device_node_t* rem = (*current);
+        (*current) = (*current)->next;
+        free(rem);
         break;
       }
       current = &((*current)->next);
@@ -91,7 +97,7 @@ static void send_init_request(device_node_t* d) {
     event_t * ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, init_msg, sizeof(message_t));
     if(ev != NULL) {
       send_message(ev, init_msg->destId);
-      LOG_INFO(TAG, "Sent the init request to %s", uuid_to_string(init_msg->destId));
+      LOG_INFO(TAG, "Sent the init request to %s", uuid_to_string(d->id));
     } else {
       free_message(init_msg);
     }

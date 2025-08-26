@@ -1360,7 +1360,9 @@ bool send_message(event_t *msg, const uint8_t *destination_id)
 {
   xSemaphoreTake(comm_mutex, portMAX_DELAY);
   LOG_INFO(TAG, "Request to send message to %s", uuid_to_string((uint8_t *)destination_id));
-
+  if(xQueueSend(proto_discovery_queue, &msg, portMAX_DELAY) != pdPASS) {
+    free_event(msg);
+  } 
   xSemaphoreGive(comm_mutex);
 }
 
