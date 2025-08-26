@@ -126,7 +126,6 @@ static void iot_control_protocol_task() {
   }
 }
 
-
 void iot_control_protocol_init() {
   get_local_identifier(id);
 

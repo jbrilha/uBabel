@@ -190,6 +190,8 @@ void simple_overlay_network_init() {
 
   proto_manager_register_protocol(simple_overlay_queue, SIMPLE_OVERLAY_PROTO_ID);
   event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_DISCOVERED);
+  event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_CONNECTED);
+  event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_FAILED);
 
   xTaskCreate(simple_overlay_task, "simple_overlay_protocol", SIMPLE_OVERLAY_TASK_STACK_SIZE, NULL, SIMPLE_OVERLAY_TASK_PRIORITY, NULL);
 
