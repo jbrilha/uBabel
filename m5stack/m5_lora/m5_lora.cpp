@@ -80,40 +80,34 @@ void sender_task(void *pvParameters) {
 void receiver_task(void *pvParameters) {
     int state;
     uint8_t received_data[256];
-    size_t received_length;
-
-    state = radio.startReceive();
-    if (state != RADIOLIB_ERR_NONE) {
-        ESP_LOGE(TAG, "failed to start LoRa receive mode, code %d", state);
-        vTaskDelete(NULL);
-        return;
-    }
 
     for (;;) {
-        if (radio.getPacketLength() > 0) {
-            ESP_LOGI(TAG, "[SX1276] Receiving packet ...");
-
-            state = radio.readData(received_data, sizeof(received_data) - 1);
-
-            if (state == RADIOLIB_ERR_NONE) {
-                received_length = radio.getPacketLength();
-                if (received_length < sizeof(received_data)) {
-                    received_data[received_length] = '\0';
-                } else {
-                    received_data[sizeof(received_data) - 1] = '\0';
-                }
-
-                ESP_LOGI(TAG, "received packet: '%s'", received_data);
-                ESP_LOGI(TAG, "RSSI: %.2f dBm", radio.getRSSI());
-                ESP_LOGI(TAG, "SNR: %.2f dB", radio.getSNR());
-
+        ESP_LOGI(TAG, "[SX1276] Waiting for incoming transmission ...");
+        
+        state = radio.receive(received_data, sizeof(received_data) - 1);
+        
+        if (state == RADIOLIB_ERR_NONE) {
+            ESP_LOGI(TAG, "success!");
+            
+            size_t received_length = radio.getPacketLength();
+            if (received_length < sizeof(received_data)) {
+                received_data[received_length] = '\0';
             } else {
-                ESP_LOGE(TAG, "failed to read LoRa packet, code %d", state);
+                received_data[sizeof(received_data) - 1] = '\0';
             }
-
-            radio.startReceive();
+            
+            ESP_LOGI(TAG, "[SX1276] Data: %s", received_data);
+            ESP_LOGI(TAG, "[SX1276] RSSI: %.2f dBm", radio.getRSSI());
+            ESP_LOGI(TAG, "[SX1276] SNR: %.2f dB", radio.getSNR());
+            
+        } else if (state == RADIOLIB_ERR_RX_TIMEOUT) {
+            ESP_LOGI(TAG, "timeout!");
+        } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+            ESP_LOGI(TAG, "CRC error!");
+        } else {
+            ESP_LOGI(TAG, "failed, code %d", state);
         }
-
+        
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
