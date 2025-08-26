@@ -716,7 +716,7 @@ static void attempt_to_close_connection(uint8_t *node_id)
 
 static void socket_manager_task(void *params)
 {
-  printf("[proto_discovery:] starting to receive multicast messages in IP: %s\n", (char *)params);
+  LOG_INFO(TAG, "Starting to receive multicast messages in IP: %s\n", (char *)params);
 
   // Start by cleaning up from a previous execution:
   if (socket >= 0)
@@ -787,14 +787,13 @@ static void socket_manager_task(void *params)
     tv.tv_usec = (remaining % 1000) * 1000;
     LOG_INFO(TAG, "Entering Select :: Timeout for select is of %d miliseconds (%d seconds and %d useconds)", remaining, tv.tv_sec, tv.tv_usec);
     n = lwip_select(highest_socket, &rfds, NULL, NULL, &tv);
-    LOG_INFO(TAG, "Got out of select with %d active sockets", n);
+    LOG_INFO(TAG, "Got out of select with %d active sockets (I am %s)", n, uuid_to_string(my_id));
 
     if (n > 0)
     {
       xSemaphoreTake(comm_mutex, portMAX_DELAY);
       // Check TCP connections
       current = address_book;
-      ;
       while (current != NULL)
       {
         if (current->status == CONNECTED && FD_ISSET(current->tcp_socket, &rfds))
@@ -827,8 +826,10 @@ static void socket_manager_task(void *params)
           if(ev != NULL) {
             ev->reference_counter++;
             xQueueSend(proto_discovery_queue, &ev, portMAX_DELAY);
+            msg = NULL;
           } else {
             free(msg);
+            msg = NULL;
             LOG_ERROR(TAG, "Could not allocate memory for an event.");
             continue;
           }
@@ -838,6 +839,7 @@ static void socket_manager_task(void *params)
           int e = errno;
           printf("Recvfrom error: %d\n", e);
           free(msg);
+          msg = NULL;
         }
       }
     }
@@ -1040,7 +1042,7 @@ static void processDiscoveryMessage(event_t *ev)
         p = register_new_participant_info(&msg);
         if (p != NULL)
         {
-          uint8_t *id = malloc(UUID_SIZE);
+          uint8_t *id = (uint8_t*) malloc(UUID_SIZE);
           if (id == NULL)
           {
             LOG_ERROR(TAG, "Could not allocate space for node id on EVENT_NOTIFICAITON_NODE_DISCOVERED");
@@ -1052,10 +1054,10 @@ static void processDiscoveryMessage(event_t *ev)
           {
             free(id);
             LOG_ERROR(TAG, "Could not allocate space for event EVENT_NOTIFICAITON_NODE_DISCOVERED");
-            return;
+          } else {
+            LOG_INFO(TAG, "Emitting NOTIFICATION NODE DISCOVERED for %s", uuid_to_string(id));
+            event_dispatcher_post(e);
           }
-          LOG_INFO(TAG, "Emitting NOTIFICATION NODE DISCOVERED for %s", uuid_to_string(id));
-          event_dispatcher_post(e);
         }
       }
       else
@@ -1358,7 +1360,9 @@ bool send_message(event_t *msg, const uint8_t *destination_id)
 {
   xSemaphoreTake(comm_mutex, portMAX_DELAY);
   LOG_INFO(TAG, "Request to send message to %s", uuid_to_string((uint8_t *)destination_id));
-
+  if(xQueueSend(proto_discovery_queue, &msg, portMAX_DELAY) != pdPASS) {
+    free_event(msg);
+  } 
   xSemaphoreGive(comm_mutex);
 }
 

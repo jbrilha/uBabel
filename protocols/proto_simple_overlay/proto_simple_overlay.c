@@ -93,7 +93,6 @@ static void simple_overlay_task() {
         {
           LOG_INFO(TAG, "Received a NODE DISCOVERED NOTIFICATION");
           if(!check_node_exists((uint8_t*) event->payload)) {  
-
             candidate_node_t* node = (candidate_node_t*) malloc(sizeof(candidate_node_t));
             if(node != NULL) {
               memcpy(node->id, event->payload, UUID_SIZE);
@@ -191,6 +190,8 @@ void simple_overlay_network_init() {
 
   proto_manager_register_protocol(simple_overlay_queue, SIMPLE_OVERLAY_PROTO_ID);
   event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_DISCOVERED);
+  event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_CONNECTED);
+  event_dispatcher_register(simple_overlay_queue, EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_FAILED);
 
   xTaskCreate(simple_overlay_task, "simple_overlay_protocol", SIMPLE_OVERLAY_TASK_STACK_SIZE, NULL, SIMPLE_OVERLAY_TASK_PRIORITY, NULL);
 

@@ -25,6 +25,7 @@
 #include "pico_buttons.h"
 #include "common_events.h"
 #include "proto_simple_overlay.h"
+#include "proto_iot_control.h"
 
 #include "tcp.h"
 #include "udp.h"
@@ -134,9 +135,9 @@ void scroll_task(__unused void *params) {
                     sprintf(text, "Neighbor down: %s", uuid_to_string((uint8_t*) event->payload));
                     pico_scroll_scroll_text(text, 255, 10);
                 }
-
-                free_event(event);
             }
+
+            free_event(event);
         }
     }
 }
@@ -178,8 +179,9 @@ void unicorn_task(__unused void *params) {
                 } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
                     button_y = !button_y;
                 }
-                free_event(event); // Free the event memory
             }
+
+            free_event(event); // Free the event memory
         } 
 
         i++;
@@ -285,6 +287,7 @@ void main_task(__unused void *params) {
     );
 
     simple_overlay_network_init();
+    iot_control_protocol_init();
 
     vTaskDelete(NULL);
 }

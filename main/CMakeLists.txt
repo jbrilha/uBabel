@@ -29,6 +29,7 @@ if(DEFINED BUILD_PICO)
         pico_touch_screen
         mem_check
         proto_simple_overlay
+        proto_iot_control
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)

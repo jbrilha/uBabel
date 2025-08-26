@@ -173,8 +173,10 @@ bool event_dispatcher_unregister(QueueHandle_t queue, event_type_t type, uint16_
 bool event_dispatcher_post(event_t *event)
 {
     LOG_INFO(TAG, "Posting event type=%d subtype=%d origin=%d destination=%d", event->type, event->subtype, event->proto_source, event->proto_destination);
-    if (!dispatcher_queue)
+    if (dispatcher_queue == NULL) {
+        LOG_ERROR(TAG, "Dispacher Queue is null, cannot dispatch.");
         return false;
+    }
 
     xSemaphoreTake(dispatch_mutex, portMAX_DELAY);
 
@@ -200,7 +202,8 @@ void event_dispatcher_task(void *params)
     {
         if (xQueueReceive(dispatcher_queue, &event, portMAX_DELAY) == pdPASS)
         {
-            LOG_INFO(TAG, "Dispatching event type=%d subtype=%d", event->type, event->subtype);
+            LOG_INFO(TAG, "Dispatching event type=%d subtype=%d (source->%d; destination->%d; event counter: %d)", event->type, event->subtype, event->proto_source, event->proto_destination, event->reference_counter);
+            event->reference_counter++;
 
             if (is_event_type(event, EVENT_TYPE_REQUEST) && event->proto_destination != MICRO_BABEL_SYSTEM_PROTOCOL)
             {
@@ -212,41 +215,46 @@ void event_dispatcher_task(void *params)
                 }
                 else
                 {
-                    event->reference_counter++;
+                    event->reference_counter++;    
                 }
             }
             else
             {
                 LOG_INFO(TAG, "Dispatching event by using its type = %d and subtype = %d", event->type, event->subtype);
+                
                 event_subtype_subscription_t *subtype_node = find_subtype_subscription(find_type_subscriptions(event->type), event->subtype);
                 if (subtype_node == NULL)
                 {
                     LOG_INFO(TAG, "No subscriptions found for event type=%d subtype=%d", event->type, event->subtype);
-                    free_event(event);
-                    continue;
                 }
-
-                event->reference_counter++;
-
-                LOG_INFO(TAG, "Dispatching event to %d diffrent queues", subtype_node->queue_count);
-                for (int i = 0; i < subtype_node->queue_count; i++)
+                else 
                 {
-                    event->reference_counter++;
-                    if (xQueueSend(subtype_node->queues[i], &event, portMAX_DELAY) != pdPASS)
+                    LOG_INFO(TAG, "Dispatching event to %d diffrent queues", subtype_node->queue_count);
+                    for (int i = 0; i < subtype_node->queue_count; i++)
                     {
-                        free_event(event);
-                        LOG_INFO(TAG, "Failed to send event to queue %d for type=%d subtype=%d", i, event->type, event->subtype);
-                    }
-                    else
-                    {  
-                        LOG_INFO(TAG, "Dispatched the event successfully once");
+                        if(subtype_node->queues[i] != NULL)
+                        {
+                            event->reference_counter++;
+                            if (xQueueSend(subtype_node->queues[i], &event, portMAX_DELAY) != pdPASS)
+                            {
+                                free_event(event);
+                                LOG_INFO(TAG, "Failed to send event to queue %d for type=%d subtype=%d", i, event->type, event->subtype);
+                            }
+                            else
+                            {  
+                                LOG_INFO(TAG, "Dispatched the event successfully once");
+                            }
+                        }
+                        else
+                        {
+                            LOG_ERROR(TAG, "Subtype queue on position %d was NULL", i);
+                        }
                     }
                 }
-
-                free_event(event);
             }
+            free_event(event);
 
-            LOG_INFO(TAG, "Finished dispatching event");
+            LOG_INFO(TAG, "Finished dispatching event\n");
         }
     }
 }
