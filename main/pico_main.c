@@ -287,6 +287,7 @@ void main_task(__unused void *params) {
     );
 
     simple_overlay_network_init();
+    iot_control_protocol_init();
 
     vTaskDelete(NULL);
 }
