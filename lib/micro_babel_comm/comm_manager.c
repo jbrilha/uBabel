@@ -600,6 +600,9 @@ static void handle_tcp_client(node_register_t *participant)
 
     // 4) Post event
     event_t *event = create_event(EVENT_TYPE_MESSAGE, msg_code, message, sizeof(message_t));
+    event->proto_source = MICRO_BABEL_DISCOVERY_PROTO;
+    event->proto_destination = message->destProto;
+    
     if (!event) {
         free_message(message);
         return;
