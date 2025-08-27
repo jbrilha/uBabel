@@ -15,6 +15,7 @@
 /**************** MESSAGE CODES TO INTERACT WITH BABEL ON RASPBERRY *******************/
 #define MSG_INIT 17001
 #define MSG_CMD 17002
+#define MSG_DEVICE_UPDATE 17003
 
 typedef struct device {
   uint8_t device_type;
@@ -132,6 +133,13 @@ static void iot_control_protocol_task() {
           else
             LOG_INFO(TAG, "Failed to remove device node with id %s", uuid_to_string(event->payload)); 
         } 
+      }
+      else if(event->type == EVENT_TYPE_MESSAGE) {
+        if(event->type == MSG_DEVICE_UPDATE) {
+          LOG_INFO(TAG, "Received an MSG_DEVICE_UPDATE from %s:%d", uuid_to_string(((message_t* )event->payload)->sourceId), ((message_t* )event->payload)->sourceProto);
+        } else {
+          LOG_INFO(TAG, "Received unknown message type %d from %s:%d", event->subtype, uuid_to_string(((message_t* )event->payload)->sourceId), ((message_t* )event->payload)->sourceProto);
+        }
       }
 
       free_event(event);

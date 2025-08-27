@@ -40,6 +40,7 @@
 
 #define MAX_PROTOCOL_NAME_SIZE 38
 #define MAX_UDP_PACKET_SIZE 1024 // 65535
+#define COMM_READ_TIMEOUT_MS  1000     // per step; tune as needed
 
 #define EVENT_MESSAGE_ADDRESS_BOOK_QUERY 301
 #define EVENT_MESSAGE_ADDRESS_BOOK_REPLY 302
@@ -478,118 +479,159 @@ static void dispatchMessageToSocket(message_t* msg) {
   }
 }
 
-static bool receive_from_tcp(node_register_t *participant, uint8_t *ptr, uint16_t *to_receive)
-{
-  int r = 0;
-  bool ret = true;
+static bool recv_exact(int sock, uint8_t *dst, size_t len, int timeout_ms) {
+    size_t off = 0;
+    while (off < len) {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(sock, &rfds);
 
-  while (*to_receive > 0)
-  {
-    r = lwip_recv(participant->tcp_socket, ptr, *to_receive, MSG_DONTWAIT);
-    if (r == 0)
-    {
-      // Peer performed an orderly shutdown (FIN received)
-      LOG_INFO(TAG, "Socket %d closed by peer\n", participant->tcp_socket);
-      participant->status = DISCONNECTED;
-      participant->active_ip = NULL;
-      lwip_close(participant->tcp_socket);
-      participant->tcp_socket = -1;
-      ret = false;
-      break;
-    }
-    else if (r < 0)
-    {
-      if (errno != EWOULDBLOCK && errno != EAGAIN)
-      {
-        // Real error
-        LOG_INFO(TAG, "Socket %d error %d\n", participant->tcp_socket, errno);
-        participant->status = DISCONNECTED;
-        participant->active_ip = NULL;
-        lwip_close(participant->tcp_socket);
-        participant->tcp_socket = -1;
-        ret = false;
-        break;
-      }
-    }
-    else
-    {
-      *to_receive -= r;
-      ptr += r;
-    }
-  }
+        struct timeval tv;
+        tv.tv_sec  = timeout_ms / 1000;
+        tv.tv_usec = (timeout_ms % 1000) * 1000;
 
-  if (ret == false)
-  {
-    uint8_t *id = (uint8_t *)malloc(UUID_SIZE);
-    if (id != NULL)
-    {
-      memcpy(id, participant->id, UUID_SIZE);
-      event_t *ev = create_event(EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_FAILED, id, UUID_SIZE);
-      if (ev != NULL)
-      {
-        ev->reference_counter++;
-        for (uint16_t i = 0; i < participant->n_protocols; i++)
-        {
-          QueueHandle_t proto = find_protocol(participant->protocols[i]);
-          if (proto != NULL && xQueueSend(proto, &ev, portMAX_DELAY) == pdPASS)
-          {
-            ev->reference_counter++;
-          }
+        int n = lwip_select(sock + 1, &rfds, NULL, NULL, (timeout_ms >= 0) ? &tv : NULL);
+        if (n == 0) {
+            // timeout
+            return false;
+        } else if (n < 0) {
+            // select error
+            return false;
         }
-        free_event(ev);
-      }
-    }
-  }
 
-  return ret;
+        int r = lwip_recv(sock, dst + off, (int)(len - off), 0); // blocking
+        if (r == 0) {
+            // Peer closed gracefully
+            return false;
+        } else if (r < 0) {
+            // Real error (EINTR is uncommon in lwIP; treat as error)
+            return false;
+        }
+        off += (size_t)r;
+    }
+    return true;
+}
+
+static bool receive_from_tcp_exact(node_register_t *participant, uint8_t *ptr, uint16_t total, int per_chunk_timeout_ms)
+{
+    // We’ll use the helper above
+    return recv_exact(participant->tcp_socket, ptr, total, per_chunk_timeout_ms);
 }
 
 static void handle_tcp_client(node_register_t *participant)
 {
-  uint16_t to_receive = 2;
-  uint16_t msg_size = 0;
-  uint16_t msg_code = 0;
-  uint8_t *buffer;
-  if (receive_from_tcp(participant, (uint8_t *)&msg_size, &to_receive))
-  {
-    LOG_INFO(TAG, "Received message with a total of %d bytes", msg_size);
-    to_receive = 2;
-    if (msg_size >= 2 && receive_from_tcp(participant, (uint8_t *)&msg_code, &to_receive))
-    {
-      LOG_INFO(TAG, "Received message with identifier: %d", msg_code);
-      msg_size -= 2;
-      if (msg_size > 0)
-      {
-        buffer = malloc(msg_size);
-        if (buffer == 0)
-        {
-          // malloc failed
-          return;
-        }
-        to_receive = msg_size;
-        if (receive_from_tcp(participant, buffer, &to_receive))
-        {
-          event_t *event = create_event(EVENT_TYPE_MESSAGE, msg_code, buffer, msg_size);
-          if (event == NULL)
-          {
-            free(buffer);
-            return;
-          }
-          else
-          {
-            event_dispatcher_post(event);
-          }
-        }
-        else
-        {
-          free(buffer);
-        }
+    uint8_t hdr2[2];
+
+    // 1) Read total message size (2 bytes, network order)
+    if (!receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
+        // Treat as connection gone
+        LOG_INFO(TAG, "Failed to read size from socket %d", participant->tcp_socket);
+        goto hard_fail;
+    }
+    uint16_t msg_size = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
+
+    LOG_INFO(TAG, "Message total size (incl. code): %u bytes", msg_size);
+
+    if (msg_size < 2) {
+        LOG_INFO(TAG, "Invalid message size: %u", msg_size);
+        goto hard_fail;
+    }
+
+    // 2) Read message code (2 bytes, network order)
+    if (!receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
+        LOG_INFO(TAG, "Failed to read code from socket %d", participant->tcp_socket);
+        goto hard_fail;
+    }
+    uint16_t msg_code = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
+    uint16_t payload_len = (uint16_t)(msg_size - 2);
+
+    message_t* message = (message_t*) malloc(sizeof(message_t));
+    if(message == NULL) {
+      LOG_INFO(TAG, "Cannot allocate memory for message that was received");
+      return;
+    }
+
+    message->payload = NULL;
+
+    if(payload_len < UUID_SIZE || !receive_from_tcp_exact(participant, message->sourceId, UUID_SIZE, COMM_READ_TIMEOUT_MS)) {
+        LOG_INFO(TAG, "Failed to read sourceID from socket %d", participant->tcp_socket);
+        goto hard_fail;
+    }
+
+    if(payload_len < 2 || !receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
+        LOG_INFO(TAG, "Failed to read sourceProto from socket %d", participant->tcp_socket);
+        goto hard_fail;
+    }
+
+    message->sourceProto = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
+
+    if(payload_len < UUID_SIZE || !receive_from_tcp_exact(participant, message->destId, UUID_SIZE, COMM_READ_TIMEOUT_MS)) {
+        LOG_INFO(TAG, "Failed to read destID from socket %d", participant->tcp_socket);
+        goto hard_fail;
+    }
+
+    if(payload_len < 2 || !receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
+        LOG_INFO(TAG, "Failed to read destProto from socket %d", participant->tcp_socket);
+        goto hard_fail;
+    }
+
+    message->destProto = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
+
+    if(payload_len < 2 || !receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
+        LOG_INFO(TAG, "Failed to read payloadSize from socket %d", participant->tcp_socket);
+        goto hard_fail;
+    }
+
+    message->payload_size = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
+
+    if(message->payload_size > 0) {
+      message->payload = (uint8_t*) malloc(message->payload_size);
+      if(message->payload == NULL) {
+        LOG_INFO(TAG, "Cannot allocate memory for message payload with %d bytes", message->payload_size);
+        free(message);
+        return;
+      }
+
+       if(payload_len < message->payload_size || !receive_from_tcp_exact(participant, message->payload, message->payload_size, COMM_READ_TIMEOUT_MS)) {
+        LOG_INFO(TAG, "Failed to read payload from socket %d", participant->tcp_socket);
+        goto hard_fail;
       }
     }
-  }
-  else
-  {
-  }
+
+    // 4) Post event
+    event_t *event = create_event(EVENT_TYPE_MESSAGE, msg_code, message, sizeof(message_t));
+    if (!event) {
+        free_message(message);
+        return;
+    }
+    // post to the dispatcher (which fans out to interested queues)
+    if (!event_dispatcher_post(event)) {
+        free_event(event); // let your free_event own/cleanup payload
+    }
+    return;
+
+hard_fail:
+    // Close & mark down; you can emit your NODE_FAILED notification here once
+    LOG_INFO(TAG, "Closing socket %d", participant->tcp_socket);
+    lwip_close(participant->tcp_socket);
+    participant->tcp_socket = -1;
+    participant->status = DISCONNECTED;
+    participant->active_ip = NULL;
+
+    uint8_t* failed_id = malloc(UUID_SIZE);
+    if(failed_id != NULL) {
+
+      memcpy(failed_id, participant->id, UUID_SIZE);
+      event_t* failed = create_event(EVENT_TYPE_NOTIFICATION, EVENT_NOTIFICATION_NODE_FAILED, failed_id, UUID_SIZE);
+      
+      if(failed != NULL) {
+        if(event_dispatcher_post(failed)) {
+          free_event(failed);
+        }
+      } else {
+        free(failed_id);
+      }
+    }
 }
 
 // Assumes mutex was acquird previously
