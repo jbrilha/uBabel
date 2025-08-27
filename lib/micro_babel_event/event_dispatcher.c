@@ -205,7 +205,7 @@ void event_dispatcher_task(void *params)
             LOG_INFO(TAG, "Dispatching event type=%d subtype=%d (source->%d; destination->%d; event counter: %d)", event->type, event->subtype, event->proto_source, event->proto_destination, event->reference_counter);
             event->reference_counter++;
 
-            if ((is_event_type(event, EVENT_TYPE_REQUEST) || is_event_type(event, EVENT_TYPE_MESSAGE) && event->proto_destination != MICRO_BABEL_SYSTEM_PROTOCOL)
+            if ((is_event_type(event, EVENT_TYPE_REQUEST) || is_event_type(event, EVENT_TYPE_MESSAGE)) && event->proto_destination != MICRO_BABEL_SYSTEM_PROTOCOL)
             {
                 LOG_INFO(TAG, "Dispatching event by using its proto_destination = %d", event->proto_destination);
                 QueueHandle_t protocol_queue = find_protocol(event->proto_destination);
