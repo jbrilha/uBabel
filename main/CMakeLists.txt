@@ -37,6 +37,12 @@ if(DEFINED BUILD_PICO)
 
     pico_add_extra_outputs(${PROJECT_NAME})
 else()
-    idf_component_register(SRCS "esp32_main.c"
+    if(DEFINED M5STACK_CORE_BASIC)
+        set(ESP_SRCS m5_main.c)
+    else()
+        set(ESP_SRCS esp32_main.c)
+    endif()
+
+    idf_component_register(SRCS ${ESP_SRCS}
                     INCLUDE_DIRS "." "../shared")
 endif()

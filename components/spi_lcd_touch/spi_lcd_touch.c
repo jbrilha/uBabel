@@ -269,7 +269,7 @@ void init_lcd_spi() {
         .quadhd_io_num = -1,
         .max_transfer_sz = LCD_H_RES * 80 * sizeof(uint16_t),
         .flags = SPICOMMON_BUSFLAG_SCLK |
-#ifndef M5STACK_CORE_BASIC
+#ifndef CONFIG_LCD_CONTROLLER_ILI9342
                  SPICOMMON_BUSFLAG_MISO |
 #endif
                  SPICOMMON_BUSFLAG_MOSI | SPICOMMON_BUSFLAG_MASTER,
@@ -404,8 +404,13 @@ void lcd_init_task(void *pvParameters) {
                                     .pin_bit_mask = 1ULL << BK_LIGHT};
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
 
+#ifndef M5STACK_CORE_BASIC
+    // only init SPI here if NOT using the M5 Stack, otherwise let the LoRa task
+    // handle it
+    // TODO — more robust SPI sharing approach
     ESP_LOGI(TAG, "Initialize LCD SPI bus");
     init_lcd_spi();
+#endif
 
     ESP_LOGI(TAG, "Install panel IO");
     init_display();
