@@ -14,9 +14,9 @@
 #include "event_dispatcher.h"
 #include "network_manager.h"
 
-#include "m5_lora.h"
-// #include "m5_display.h"
+#include "esp_lora.h"
 #include "spi_lcd_touch.h"
+#include "spi_manager.h"
 
 static const char *TAG = "M5_MAIN";
 
@@ -33,9 +33,10 @@ void app_main(void) {
 
     event_dispatcher_init();
 
+    spi_manager_init();
     // LORA INIT MUST COME BEFORE LCD INIT due to SPI shenanigans
-    start_lora_sender_task();
-    // start_lora_receiver_task();
+    // start_lora_sender();
+    start_lora_receiver();
 
     xTaskCreate(lcd_init_task,   // Task function
                 "lcd_init_task", // Task name
