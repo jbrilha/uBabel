@@ -1,13 +1,13 @@
 #include "ui_event_manager.h"
 
 #include "event.h"
+#include "lora_events.h"
 #include "event_dispatcher.h"
 #include "freertos/projdefs.h"
 #include "lvgl_ui.h"
 
 #define UI_MANAGER_TASK_STACK_SIZE (4 * 1024)
 #define UI_MANAGER_TASK_PRIORITY 2
-
 
 #define Q_LEN 10
 
@@ -111,11 +111,7 @@ static void handle_ui_notif(event_t *e) {
 
     } break;
     case UI_EVENT_REC_LORA: {
-        lora_payload_t lp = *(lora_payload_t *)e->payload;
-        lora_widget_animate_to_rssi(lp.rssi);
-        lora_widget_animate_to_snr(lp.snr);
-        lora_widget_set_freq_err(lp.freq_err);
-        lora_widget_set_message_txt((const char *)lp.payload);
+        lora_widget_set_info_from_event(e);
     }
     default:
         break;

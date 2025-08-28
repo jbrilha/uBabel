@@ -1,8 +1,7 @@
-#include "lvgl_lora_widget.h"
 #include "esp_log.h"
-#include "misc/lv_color.h"
-#include "misc/lv_style.h"
-#include "widgets/label/lv_label.h"
+#include "lvgl_lora_widget.h"
+
+#include "lora_types.h"
 #include <stdio.h>
 
 #define RSSI_BAR_MIN (-157)
@@ -308,7 +307,7 @@ void lora_widget_set_freq_err(int32_t err) {
     }
 }
 
-void lora_widget_set_message_id(const char *id) {
+void lora_widget_set_message_id_txt(const char *id) {
     if (message_id_txt && lvgl_lock) {
         _lock_acquire(lvgl_lock);
         lv_label_set_text(message_id_txt, id);
@@ -330,6 +329,27 @@ void lora_widget_set_sender_txt(const char *sender) {
         lv_label_set_text(sender_txt, sender);
         _lock_release(lvgl_lock);
     }
+}
+
+void lora_widget_set_info_from_event(event_t *e) {
+    lora_info_t info = *(lora_info_t *)e->payload;
+
+    char sender_str[8];
+    snprintf(sender_str, sizeof(sender_str), "0x%02X", info.pkt->sender_id);
+    lora_widget_set_sender_txt(sender_str);
+
+    char msg_id_str[8];
+    snprintf(msg_id_str, sizeof(msg_id_str), "%d", info.pkt->message_id);
+    lora_widget_set_message_id_txt(msg_id_str);
+
+    lora_widget_animate_to_rssi(info.rssi);
+    lora_widget_animate_to_snr(info.snr);
+    lora_widget_set_freq_err(info.freq_err);
+
+    char payload_str[info.pkt->payload_len + 1];
+    memcpy(payload_str, info.pkt->payload, info.pkt->payload_len);
+    payload_str[info.pkt->payload_len] = '\0';
+    lora_widget_set_message_txt(payload_str);
 }
 
 void lora_widget_init(lv_display_t *disp, _lock_t *lock) {

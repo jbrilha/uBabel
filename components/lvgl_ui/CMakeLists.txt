@@ -7,5 +7,5 @@ set(COMP_SRCS
 
 idf_component_register(SRCS ${COMP_SRCS}
                         INCLUDE_DIRS "." "./include"
-                        REQUIRES micro_babel_event lvgl__lvgl
+                        REQUIRES micro_babel_event lvgl__lvgl esp_lora
 )
