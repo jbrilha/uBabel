@@ -34,10 +34,8 @@ void app_main(void) {
     event_dispatcher_init();
 
     spi_manager_init();
-    // LORA INIT MUST COME BEFORE LCD INIT due to SPI shenanigans
-    // start_lora_sender();
-    start_lora_receiver();
 
+    start_lora_receiver();
     xTaskCreate(lcd_init_task,   // Task function
                 "lcd_init_task", // Task name
                 4096,            // Stack size in words
@@ -45,5 +43,7 @@ void app_main(void) {
                 1,               // Priority
                 NULL             // Task handle
     );
+
+    // start_lora_sender();
 
 }
