@@ -8,3 +8,4 @@ build*/
 esp-idf
 managed_components
 dependencies.lock
+screenlog*
