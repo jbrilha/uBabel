@@ -32,17 +32,6 @@ typedef uint8_t event_type_t;
 
 #define UUID_SIZE 16
 
-// TODO I need to move these elsewhere but not sure where to avoid circular deps
-#define UI_EVENT_REC_LORA 1105
-typedef struct {
-    uint16_t length;
-    uint8_t* payload;
-    int16_t rssi;
-    float snr;
-    int32_t freq_err;
-} lora_payload_t;
-// -------------------------
-
 // === Generic Event Structure ===
 typedef struct {
     event_type_t type;
