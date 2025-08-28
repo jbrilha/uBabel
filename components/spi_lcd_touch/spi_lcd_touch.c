@@ -75,30 +75,30 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_CS 14
 #define LCD_RST 33
 #define LCD_DC 27
-#define LCD_MOSI 23
-#define LCD_CLK 18
+// #define LCD_MOSI 23
+// #define LCD_CLK 18
 #define BK_LIGHT 32
-#define LCD_MISO -1
+// #define LCD_MISO -1
 // no touch capabilities on the Core Basic :(
 #define CONFIG_LCD_TOUCH_ENABLED 0
 #elif defined(CONFIG_IDF_TARGET_ESP32)
 #define LCD_CS 4
 #define LCD_RST 13
 #define LCD_DC 5
-#define LCD_MOSI 19
-#define LCD_CLK 18
+// #define LCD_MOSI 19
+// #define LCD_CLK 18
 #define BK_LIGHT 2
-#define LCD_MISO 21
+// #define LCD_MISO 21
 
 #define TOUCH_CS 15
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #define LCD_CS 10
 #define LCD_RST 6
 #define LCD_DC 7
-#define LCD_MOSI 11
-#define LCD_CLK 12
+// #define LCD_MOSI 11
+// #define LCD_CLK 12
 #define BK_LIGHT 5
-#define LCD_MISO 13
+// #define LCD_MISO 13
 
 #define TOUCH_MOSI 39
 #define TOUCH_CLK 38
@@ -260,22 +260,22 @@ static void lvgl_port_task(void *arg) {
     }
 }
 
-void init_lcd_spi() {
-    spi_bus_config_t buscfg = {
-        .sclk_io_num = LCD_CLK,
-        .mosi_io_num = LCD_MOSI,
-        .miso_io_num = LCD_MISO,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = LCD_H_RES * 80 * sizeof(uint16_t),
-        .flags = SPICOMMON_BUSFLAG_SCLK |
-#ifndef CONFIG_LCD_CONTROLLER_ILI9342
-                 SPICOMMON_BUSFLAG_MISO |
-#endif
-                 SPICOMMON_BUSFLAG_MOSI | SPICOMMON_BUSFLAG_MASTER,
-        .intr_flags = ESP_INTR_FLAG_LOWMED | ESP_INTR_FLAG_IRAM};
-    ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
-}
+// void init_lcd_spi() {
+//     spi_bus_config_t buscfg = {
+//         .sclk_io_num = LCD_CLK,
+//         .mosi_io_num = LCD_MOSI,
+//         .miso_io_num = LCD_MISO,
+//         .quadwp_io_num = -1,
+//         .quadhd_io_num = -1,
+//         .max_transfer_sz = LCD_H_RES * 80 * sizeof(uint16_t),
+//         .flags = SPICOMMON_BUSFLAG_SCLK |
+// #ifndef CONFIG_LCD_CONTROLLER_ILI9342
+//                  SPICOMMON_BUSFLAG_MISO |
+// #endif
+//                  SPICOMMON_BUSFLAG_MOSI | SPICOMMON_BUSFLAG_MASTER,
+//         .intr_flags = ESP_INTR_FLAG_LOWMED | ESP_INTR_FLAG_IRAM};
+//     ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
+// }
 
 void init_display() {
     esp_lcd_panel_io_spi_config_t io_config = {
@@ -404,13 +404,14 @@ void lcd_init_task(void *pvParameters) {
                                     .pin_bit_mask = 1ULL << BK_LIGHT};
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
 
-#ifndef M5STACK_CORE_BASIC
-    // only init SPI here if NOT using the M5 Stack, otherwise let the LoRa task
-    // handle it
-    // TODO — more robust SPI sharing approach
-    ESP_LOGI(TAG, "Initialize LCD SPI bus");
-    init_lcd_spi();
-#endif
+    // #ifndef M5STACK_CORE_BASIC
+    //     // only init SPI here if NOT using the M5 Stack, otherwise let the
+    //     LoRa task
+    //     // handle it
+    //     // TODO — more robust SPI sharing approach
+    //     ESP_LOGI(TAG, "Initialize LCD SPI bus");
+    //     init_lcd_spi();
+    // #endif
 
     ESP_LOGI(TAG, "Install panel IO");
     init_display();
@@ -442,12 +443,13 @@ void lcd_init_task(void *pvParameters) {
                 LVGL_TASK_PRIORITY, NULL);
 
     ESP_LOGI(TAG, "Display LVGL Meter Widget");
-    lvgl_flex_layout_init(display, &lvgl_api_lock);
+    // lvgl_flex_layout_init(display, &lvgl_api_lock);
 
-    messenger_widget_init_on_container(lvgl_flex_layout_get_col(0),
-                                       &lvgl_api_lock);
-    temperature_widget_init_on_container(lvgl_flex_layout_get_col(1),
-                                         &lvgl_api_lock, true, false);
+    lora_widget_init(display, &lvgl_api_lock);
+    // messenger_widget_init_on_container(lvgl_flex_layout_get_col(0),
+    //                                    &lvgl_api_lock);
+    // temperature_widget_init_on_container(lvgl_flex_layout_get_col(1),
+    //                                      &lvgl_api_lock, true, false);
 
     ui_event_manager_init();
 
