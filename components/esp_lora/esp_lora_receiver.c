@@ -4,7 +4,8 @@
 
 #include "esp_lora_receiver.h"
 
-#include "event.h"
+#include "lora_types.h"
+#include "lora_events.h"
 #include "event_dispatcher.h"
 
 static const char *TAG = "SX127X_RECEIVER";
@@ -12,14 +13,19 @@ static const char *TAG = "SX127X_RECEIVER";
 static int total_packets_received = 0;
 
 void rx_callback(sx127x *device, uint8_t *data, uint16_t data_length) {
-    uint8_t payload[514];
-    const char SYMBOLS[] = "0123456789ABCDEF";
-    for (size_t i = 0; i < data_length; i++) {
-        uint8_t cur = data[i];
-        payload[2 * i] = SYMBOLS[cur >> 4];
-        payload[2 * i + 1] = SYMBOLS[cur & 0x0F];
+    if (data_length < sizeof(lora_pkt_t)) {
+        ESP_LOGW(TAG, "Packet too small: %d bytes", data_length);
+        return;
     }
-    payload[data_length * 2] = '\0';
+
+    lora_pkt_t *pkt = (lora_pkt_t *)data;
+
+    size_t expected_size = sizeof(lora_pkt_t) + pkt->payload_len;
+    if (data_length != expected_size) {
+        ESP_LOGW(TAG, "Size mismatch: got %d, expected %zu", data_length,
+                 expected_size);
+        return;
+    }
 
     int16_t rssi;
     ESP_ERROR_CHECK(sx127x_rx_get_packet_rssi(device, &rssi));
@@ -27,24 +33,36 @@ void rx_callback(sx127x *device, uint8_t *data, uint16_t data_length) {
     ESP_ERROR_CHECK(sx127x_lora_rx_get_packet_snr(device, &snr));
     int32_t frequency_error;
     ESP_ERROR_CHECK(sx127x_rx_get_frequency_error(device, &frequency_error));
-    ESP_LOGI(TAG, "received: %d %s rssi: %d snr: %f freq_error: %" PRId32,
-             data_length, payload, rssi, snr, frequency_error);
 
-    // TODO THIS MIGHT MEMORY LEAK!!
-    lora_payload_t *lp = malloc(sizeof(lora_payload_t) + data_length);
-    lp->length = data_length;
-    lp->rssi = rssi;
-    lp->snr = snr;
-    lp->freq_err = frequency_error;
-    memcpy(lp->payload, payload, data_length);
+    char payload_str[pkt->payload_len + 1];
+    memcpy(payload_str, pkt->payload, pkt->payload_len);
+    payload_str[pkt->payload_len] = '\0';
+
+    ESP_LOGI(TAG,
+             "RX: from=0x%02X to=0x%02X msg_id=%d payload='%s' rssi=%d "
+             "snr=%.1f freq_err=%" PRId32,
+             pkt->sender_id, pkt->recipient_id, pkt->message_id, payload_str,
+             rssi, snr, frequency_error);
+
+    lora_info_t *info = malloc(sizeof(lora_info_t) + data_length);
+    info->rssi = rssi;
+    info->snr = snr;
+    info->freq_err = frequency_error;
+    info->pkt = pkt;
+    info->pkt_size = data_length;
+
+    uint8_t *copied_data = (uint8_t *)(info + 1);
+    memcpy(copied_data, data, data_length);
+    info->pkt = (lora_pkt_t *)copied_data;
 
     event_t *event = create_event(EVENT_TYPE_NOTIFICATION, UI_EVENT_REC_LORA,
-                                  lp, sizeof(lora_payload_t) + data_length);
+                                  info, sizeof(lora_info_t) + data_length);
     if (event) {
         event_dispatcher_post(event);
     }
     total_packets_received++;
 }
+
 
 void cad_callback(sx127x *device, int cad_detected) {
     if (cad_detected == 0) {

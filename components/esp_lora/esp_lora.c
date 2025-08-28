@@ -86,6 +86,7 @@ void init_lora_sx127x() {
 }
 
 void start_isr_task() {
+    ESP_LOGI(TAG, "starting ISR task");
     BaseType_t task_code = xTaskCreatePinnedToCore(
         handle_interrupt_task, "handle interrupt", 8196, &device, 2,
         &handle_interrupt, xPortGetCoreID());
@@ -99,27 +100,33 @@ void start_isr_task() {
 }
 
 void start_lora_receiver() {
-    ESP_LOGI(TAG, "starting up receiver");
+    ESP_LOGI(TAG, "initializing receiver");
     if (!lora_initialized) {
         init_lora_sx127x();
         lora_initialized = true;
     }
+    ESP_LOGI(TAG, "receiver initialized");
 
     configure_receiver(&device);
+    ESP_LOGI(TAG, "receiver configured");
 
     start_isr_task();
 }
 
 void start_lora_sender() {
-    ESP_LOGI(TAG, "starting up sender");
+    ESP_LOGI(TAG, "initializing sender");
     if (!lora_initialized) {
         init_lora_sx127x();
         lora_initialized = true;
     }
+    ESP_LOGI(TAG, "sender initialized");
 
     configure_sender(&device);
+    ESP_LOGI(TAG, "sender configured");
 
     start_isr_task();
+    ESP_LOGI(TAG, "ISR task started");
 
+    ESP_LOGI(TAG, "calling sender tx callback");
     tx_callback(&device);
 }
