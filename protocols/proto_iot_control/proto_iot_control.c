@@ -17,78 +17,95 @@
 #define MSG_CMD 17002
 #define MSG_DEVICE_UPDATE 17003
 
-typedef struct device {
-  uint8_t device_type;
-  struct device* next;
-} device_t;
+static SemaphoreHandle_t iot_control_protocol_mutex;
 
 typedef struct device_node {
   uint8_t id[UUID_SIZE];
-  device_t* devices;
+  uint16_t n_devices;
+  uint16_t* devices;
   struct device_node* next;
 } device_node_t;
 
 static uint8_t id[UUID_SIZE];
 static QueueHandle_t iot_control_queue;
 
-static device_node_t* new;
-static device_node_t* established;
+static device_node_t* peers;
 
 static device_node_t* register_new_participant(event_t* neighbor_up_event) {
-  device_node_t* device = (device_node_t*) malloc(sizeof(device_node_t));
-  if(device != NULL) {
-    memcpy(device->id, (uint8_t*) neighbor_up_event->payload, UUID_SIZE);
-    device->devices = NULL;
-    device->next = new;
-    new = device;
-    return device;
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+
+  device_node_t* node = (device_node_t*) malloc(sizeof(device_node_t));
+  if(node != NULL) {
+    memcpy(node->id, (uint8_t*) neighbor_up_event->payload, UUID_SIZE);
+    node->n_devices = 0;
+    node->devices = NULL;
+    node->next = peers;
+    peers = node;
   }
-  return NULL;
+
+  xSemaphoreGive(iot_control_protocol_mutex);
+  return node;
 } 
+
+static device_node_t* find_participant(int8_t* id) {
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+
+  device_node_t* current = peers;
+  while(current != NULL) {
+    if(memcpy(current->id, id, UUID_SIZE) == 0) {
+      xSemaphoreGive(iot_control_protocol_mutex);
+      return current;
+    }
+    current = current->next;
+  }
+
+  xSemaphoreGive(iot_control_protocol_mutex);
+  return NULL;
+}
+
+static void update_node_devices(message_t* update_message) {
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+
+  device_node_t* node = find_participant(update_message->payload);
+  if(node != NULL) {
+    uint16_t* msgptr = (uint16_t*) (update_message->payload + UUID_SIZE);
+    node->n_devices = *msgptr;
+    if(node->devices != NULL) {
+      free(node->devices);
+      node->devices = NULL;
+    }
+    node->devices = (uint16_t*) malloc(sizeof(uint16_t) * node->n_devices);
+    if(node->devices != NULL) {
+      memcpy(node->devices, (msgptr++) , sizeof(uint16_t) * node->n_devices);
+    } else {
+      node->n_devices = 0;
+    }
+  }
+
+  xSemaphoreGive(iot_control_protocol_mutex);
+}
 
 static bool remove_participant(event_t* neighbor_down_event) {
   bool found = false;
-  device_node_t** current = &established;
+
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+
+  device_node_t** current = &peers;
   while(found == false && *current != NULL) {
     if(memcmp((*current)->id, neighbor_down_event->payload, UUID_SIZE) == 0) {
       //Found correct device_node_t
       found = true;
-      device_t* aux = (*current)->devices;
-      while(aux != NULL) {
-        (*current)->devices = aux->next;
-        aux->next = NULL;
-        free(aux);
-        aux = (*current)->devices;
-      }
       device_node_t* rem = (*current);
       (*current) = (*current)->next;
+      if(rem->devices != NULL)
+        free(rem->devices);
       free(rem);
       break;
     }
     current = &((*current)->next);
   }
-  if(!found) 
-  {
-    current = &new;
-    while(found == false && *current != NULL) {
-      if(memcmp((*current)->id, neighbor_down_event->payload, UUID_SIZE) == 0) {
-        //Found correct device_node_t
-        found = true;
-        device_t* aux = (*current)->devices;
-        while(aux != NULL) {
-          (*current)->devices = aux->next;
-          aux->next = NULL;
-          free(aux);
-          aux = (*current)->devices;
-        }
-        device_node_t* rem = (*current);
-        (*current) = (*current)->next;
-        free(rem);
-        break;
-      }
-      current = &((*current)->next);
-    }
-  }
+
+  xSemaphoreGive(iot_control_protocol_mutex);
   return found;
 }
 
@@ -135,8 +152,9 @@ static void iot_control_protocol_task() {
         } 
       }
       else if(event->type == EVENT_TYPE_MESSAGE) {
-        if(event->type == MSG_DEVICE_UPDATE) {
+        if(event->subtype == MSG_DEVICE_UPDATE) {
           LOG_INFO(TAG, "Received an MSG_DEVICE_UPDATE from %s:%d", uuid_to_string(((message_t* )event->payload)->sourceId), ((message_t* )event->payload)->sourceProto);
+          update_node_devices((message_t*) event->payload);
         } else {
           LOG_INFO(TAG, "Received unknown message type %d from %s:%d", event->subtype, uuid_to_string(((message_t* )event->payload)->sourceId), ((message_t* )event->payload)->sourceProto);
         }
@@ -150,6 +168,7 @@ static void iot_control_protocol_task() {
 
 void iot_control_protocol_init() {
   get_local_identifier(id);
+  iot_control_protocol_mutex = xSemaphoreCreateMutex();
 
   LOG_INFO(TAG, "Initializing iot control protocol with id %s", uuid_to_string(id));
   
@@ -160,8 +179,7 @@ void iot_control_protocol_init() {
     return;
   }
 
-  new = NULL;
-  established = NULL;
+  peers = NULL;
   
   proto_manager_register_protocol(iot_control_queue, IOT_CONTROL_PROTO_ID);
   event_dispatcher_register(iot_control_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_UP);
@@ -170,4 +188,129 @@ void iot_control_protocol_init() {
   xTaskCreate(iot_control_protocol_task , "iot_control_protocol", IOT_CONTROL_TASK_STACK_SIZE, NULL, IOT_CONTROL_TASK_PRIORITY, NULL);
 
   LOG_INFO(TAG, "Initialized the task");
+}
+
+
+//******** API FUNCTION ***********/ 
+
+iot_node_handler_t initialize_device_iterator() {
+  return peers;
+}
+
+iot_node_handler_t next_device(iot_node_handler_t device) {
+  if(device == NULL)
+    return (iot_node_handler_t) peers;
+
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+
+  device_node_t* current = peers;
+  while(current != NULL) {
+    if ( current == (device_node_t*) device )
+      break;
+    current = current->next;
+  }
+
+  if(current == NULL || current->next == NULL) {
+    xSemaphoreGive(iot_control_protocol_mutex);
+    return (iot_node_handler_t) peers;
+  }
+  
+  xSemaphoreGive(iot_control_protocol_mutex);
+  return current->next;
+}
+
+iot_node_handler_t previous_device(iot_node_handler_t device) {
+  if(device == NULL)
+    return (iot_node_handler_t) peers;
+
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+
+  device_node_t* current = peers;    
+  device_node_t* previous = NULL;
+
+  if(peers == (device_node_t*) device) {
+    while(current->next != NULL)
+      current = current->next;
+
+    xSemaphoreGive(iot_control_protocol_mutex);
+    return (iot_node_handler_t) current;
+  }
+
+  previous = current;
+  current = current->next;
+
+  while(current != NULL && current != (device_node_t*) device) {
+    previous = current;
+    current = current->next;
+  }
+
+  if(current != NULL) {
+    xSemaphoreGive(iot_control_protocol_mutex);
+    return (iot_node_handler_t) previous;
+  } else {
+    xSemaphoreGive(iot_control_protocol_mutex);
+    return (iot_node_handler_t) peers;
+  }
+
+
+}
+
+bool print_device_identifier(iot_node_handler_t device, const char* str) {
+  if(device == NULL)
+    return false;
+
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+
+  device_node_t* current = peers;
+  while(current != NULL) {
+    if ( current == (device_node_t*) device )
+      break;
+    current = current->next;
+  }
+
+  if(current != NULL) {
+    char* s = uuid_to_string(current->id);
+    memcpy(str, s, strlen(s));
+    xSemaphoreGive(iot_control_protocol_mutex);
+    return true;
+  } else {
+    xSemaphoreGive(iot_control_protocol_mutex);
+    return false;
+  }  
+}
+
+bool device_has_led(iot_node_handler_t device) {
+  if(device == NULL)
+    return false;
+
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);  
+
+  device_node_t* current = peers;
+  while(current != NULL) {
+    if ( current == (device_node_t*) device )
+      break;
+    current = current->next;
+  }
+
+  if(current != NULL) { 
+    for(int i = 0; i < current->n_devices; i++) {
+      if(current->devices[i] == DEVICE_TYPE_LED_RGB) {
+        xSemaphoreGive(iot_control_protocol_mutex);
+        return true;
+      }
+    }
+  }
+  xSemaphoreGive(iot_control_protocol_mutex);
+  return false;
+}
+
+bool activate_led(iot_node_handler_t device) {
+  if(device == NULL)
+    return false;
+
+  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+
+  
+
+  xSemaphoreGive(iot_control_protocol_mutex);
 }
