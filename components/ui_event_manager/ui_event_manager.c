@@ -3,11 +3,11 @@
 #include "event.h"
 #include "event_dispatcher.h"
 #include "freertos/projdefs.h"
-#include "lvgl_temperature_widget.h"
 #include "lvgl_ui.h"
 
 #define UI_MANAGER_TASK_STACK_SIZE (4 * 1024)
 #define UI_MANAGER_TASK_PRIORITY 2
+
 
 #define Q_LEN 10
 
@@ -63,13 +63,16 @@ void ui_event_manager_init(void) {
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               UI_EVENT_REC_MSG);
 
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              UI_EVENT_REC_LORA);
+
     xTaskCreate(ui_event_manager_task, "UI_EVENT_MANAGER_TASK",
                 UI_MANAGER_TASK_STACK_SIZE, NULL, UI_MANAGER_TASK_PRIORITY,
                 NULL);
 
-    xTaskCreate(ui_event_test_task, "UI_EVENT_TEST_TASK",
-                UI_MANAGER_TASK_STACK_SIZE, NULL, UI_MANAGER_TASK_PRIORITY,
-                NULL);
+    // xTaskCreate(ui_event_test_task, "UI_EVENT_TEST_TASK",
+    //             UI_MANAGER_TASK_STACK_SIZE, NULL, UI_MANAGER_TASK_PRIORITY,
+    //             NULL);
 }
 
 void ui_event_manager_task(void *pvParameters) {
@@ -107,6 +110,13 @@ static void handle_ui_notif(event_t *e) {
         temperature_bar_animate_to_val(temp);
 
     } break;
+    case UI_EVENT_REC_LORA: {
+        lora_payload_t lp = *(lora_payload_t *)e->payload;
+        lora_widget_animate_to_rssi(lp.rssi);
+        lora_widget_animate_to_snr(lp.snr);
+        lora_widget_set_freq_err(lp.freq_err);
+        lora_widget_set_message_txt((const char *)lp.payload);
+    }
     default:
         break;
     }
