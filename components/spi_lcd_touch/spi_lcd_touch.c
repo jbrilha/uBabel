@@ -13,11 +13,7 @@
 #include <sys/param.h>
 #include <unistd.h>
 
-#include "event.h"
-#include "event_dispatcher.h"
-#include "lvgl_ui.h"
-#include "misc/lv_color.h"
-#include "ui_event_manager.h"
+#include "lvgl.h"
 
 static const char *TAG = "SPI_LCD_TOUCH";
 
@@ -40,7 +36,6 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_HOST SPI2_HOST
 
 #if CONFIG_LCD_CONTROLLER_ILI9341
-// can be the same for this display
 #define TOUCH_HOST LCD_HOST
 
 #define LCD_H_RES 240
@@ -124,13 +119,7 @@ static _lock_t lvgl_api_lock;
 static esp_lcd_panel_io_handle_t io_handle = NULL;
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
-
-#if CONFIG_LCD_CONTROLLER_ILI9341
-static const bool mirror_x = true;
-#elif CONFIG_LCD_CONTROLLER_ILI9488 || CONFIG_LCD_CONTROLLER_ILI9342
-
-static const bool mirror_x = false;
-#endif
+static bool display_initialized = false;
 
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
                                     esp_lcd_panel_io_event_data_t *edata,
@@ -140,43 +129,8 @@ static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
     return false;
 }
 
-int last_rotation;
-
-/* Rotate display and touch, when rotated screen in LVGL. Called when driver
- * parameters are updated. */
-static void lvgl_port_update_callback(lv_display_t *disp) {
-    esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
-    lv_display_rotation_t rotation = lv_display_get_rotation(disp);
-
-    switch (rotation) {
-    case LV_DISPLAY_ROTATION_0:
-        // Rotate LCD display
-        esp_lcd_panel_swap_xy(panel_handle, false);
-        esp_lcd_panel_mirror(panel_handle, mirror_x, false);
-        break;
-    case LV_DISPLAY_ROTATION_90:
-        // Rotate LCD display
-        esp_lcd_panel_swap_xy(panel_handle, true);
-        esp_lcd_panel_mirror(panel_handle, mirror_x, true);
-        break;
-    case LV_DISPLAY_ROTATION_180:
-        // Rotate LCD display
-        esp_lcd_panel_swap_xy(panel_handle, false);
-        esp_lcd_panel_mirror(panel_handle, !mirror_x, true);
-        break;
-    case LV_DISPLAY_ROTATION_270:
-        // Rotate LCD display
-        esp_lcd_panel_swap_xy(panel_handle, true);
-        esp_lcd_panel_mirror(panel_handle, !mirror_x, false);
-        break;
-    }
-
-    last_rotation = rotation;
-}
-
 static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area,
                           uint8_t *px_map) {
-    lvgl_port_update_callback(disp);
     esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
     int offsetx1 = area->x1;
     int offsetx2 = area->x2;
@@ -259,23 +213,6 @@ static void lvgl_port_task(void *arg) {
         usleep(1000 * time_till_next_ms);
     }
 }
-
-// void init_lcd_spi() {
-//     spi_bus_config_t buscfg = {
-//         .sclk_io_num = LCD_CLK,
-//         .mosi_io_num = LCD_MOSI,
-//         .miso_io_num = LCD_MISO,
-//         .quadwp_io_num = -1,
-//         .quadhd_io_num = -1,
-//         .max_transfer_sz = LCD_H_RES * 80 * sizeof(uint16_t),
-//         .flags = SPICOMMON_BUSFLAG_SCLK |
-// #ifndef CONFIG_LCD_CONTROLLER_ILI9342
-//                  SPICOMMON_BUSFLAG_MISO |
-// #endif
-//                  SPICOMMON_BUSFLAG_MOSI | SPICOMMON_BUSFLAG_MASTER,
-//         .intr_flags = ESP_INTR_FLAG_LOWMED | ESP_INTR_FLAG_IRAM};
-//     ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
-// }
 
 void init_display() {
     esp_lcd_panel_io_spi_config_t io_config = {
@@ -404,15 +341,6 @@ void lcd_init_task(void *pvParameters) {
                                     .pin_bit_mask = 1ULL << BK_LIGHT};
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
 
-    // #ifndef M5STACK_CORE_BASIC
-    //     // only init SPI here if NOT using the M5 Stack, otherwise let the
-    //     LoRa task
-    //     // handle it
-    //     // TODO — more robust SPI sharing approach
-    //     ESP_LOGI(TAG, "Initialize LCD SPI bus");
-    //     init_lcd_spi();
-    // #endif
-
     ESP_LOGI(TAG, "Install panel IO");
     init_display();
 
@@ -442,16 +370,23 @@ void lcd_init_task(void *pvParameters) {
     xTaskCreate(lvgl_port_task, "LVGL", LVGL_TASK_STACK_SIZE, NULL,
                 LVGL_TASK_PRIORITY, NULL);
 
-    ESP_LOGI(TAG, "Display LVGL Meter Widget");
-    // lvgl_flex_layout_init(display, &lvgl_api_lock);
-
-    lora_widget_init(display, &lvgl_api_lock);
-    // messenger_widget_init_on_container(lvgl_flex_layout_get_col(0),
-    //                                    &lvgl_api_lock);
-    // temperature_widget_init_on_container(lvgl_flex_layout_get_col(1),
-    //                                      &lvgl_api_lock, true, false);
-
-    ui_event_manager_init();
+    display_initialized = true;
 
     vTaskDelete(NULL);
+}
+
+_lock_t *spi_lcd_get_lvgl_lock(void) {
+    if (!display_initialized) {
+        return NULL;
+    }
+
+    return &lvgl_api_lock;
+}
+
+lv_display_t *spi_lcd_get_display(void) {
+    if (!display_initialized) {
+        return NULL;
+    }
+
+    return display;
 }
