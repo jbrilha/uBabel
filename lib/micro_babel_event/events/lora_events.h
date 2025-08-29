@@ -4,5 +4,6 @@
 #include "event.h"
 
 #define UI_EVENT_REC_LORA 1105
+#define UI_EVENT_SND_LORA 1106
 
 #endif // MICRO_BABEL_LORA_EVENTS_H
