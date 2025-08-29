@@ -1,7 +1,8 @@
 #include "esp_lora_sender.h"
+
+#include "event_dispatcher.h"
+#include "lora_events.h"
 #include "lora_types.h"
-#include "freertos/idf_additions.h"
-#include "freertos/projdefs.h"
 
 #define TX_INTERVAL_MS 2000
 
@@ -22,7 +23,8 @@ static uint8_t recipient_id = 0xAB;
 
 static lora_pkt_t *new_packet(int id, int power_level) {
     char payload[32];
-    snprintf(payload, sizeof(payload), "Hello with power level: %d", power_level);
+    snprintf(payload, sizeof(payload), "Hello with power level: %d",
+             power_level);
 
     size_t payload_len = strlen(payload);
     size_t total_size = sizeof(lora_pkt_t) + payload_len;
@@ -39,34 +41,26 @@ static lora_pkt_t *new_packet(int id, int power_level) {
 
 void tx_callback(sx127x *device) {
     if (messages_sent > 0) {
-        ESP_LOGI(TAG, "transmitted");
+        ESP_LOGI(TAG, "transmitted packet with id: %d", messages_sent);
         vTaskDelay(pdMS_TO_TICKS(TX_INTERVAL_MS));
     }
 
+    messages_sent++;
+}
+
+void transmit_packet_from_device(sx127x *device) {
     lora_pkt_t *pkt =
         new_packet(messages_sent, supported_power_levels[current_power_level]);
     size_t pkt_size = sizeof(lora_pkt_t) + pkt->payload_len;
 
-    if (messages_sent == 0) {
-        ESP_ERROR_CHECK(sx127x_lora_tx_set_for_transmission((uint8_t *)pkt,
-                                                            pkt_size, device));
-    } else if (current_power_level < supported_power_levels_count - 1) {
-        ESP_ERROR_CHECK(sx127x_lora_tx_set_for_transmission((uint8_t *)pkt,
-                                                            pkt_size, device));
-        ESP_ERROR_CHECK(sx127x_tx_set_pa_config(
-            SX127x_PA_PIN_BOOST, supported_power_levels[current_power_level],
-            device));
+    ESP_ERROR_CHECK(
+        sx127x_lora_tx_set_for_transmission((uint8_t *)pkt, pkt_size, device));
+    ESP_ERROR_CHECK(sx127x_tx_set_pa_config(
+        SX127x_PA_PIN_BOOST, supported_power_levels[current_power_level],
+        device));
 
-        current_power_level++;
-    } else {
-        current_power_level = 0; // reset power level cycle
-
-        ESP_ERROR_CHECK(sx127x_lora_tx_set_for_transmission((uint8_t *)pkt,
-                                                            pkt_size, device));
-        ESP_ERROR_CHECK(sx127x_tx_set_pa_config(
-            SX127x_PA_PIN_BOOST, supported_power_levels[current_power_level],
-            device));
-    }
+    current_power_level =
+        (current_power_level + 1) % supported_power_levels_count;
 
     ESP_ERROR_CHECK(
         sx127x_set_opmod(SX127x_MODE_TX, SX127x_MODULATION_LORA, device));
@@ -79,7 +73,22 @@ void tx_callback(sx127x *device) {
              "| payload_len: %d | payload: %s",
              pkt->recipient_id, pkt->sender_id, pkt->message_id,
              pkt->payload_len, payload_str);
-    messages_sent++;
+
+    size_t data_length = sizeof(lora_pkt_t) + pkt->payload_len;
+    lora_info_t *info =
+        (lora_info_t *)malloc(sizeof(lora_info_t) + data_length);
+    info->pkt = pkt;
+    info->pkt_size = data_length;
+
+    uint8_t *copied_data = (uint8_t *)(info + 1);
+    memcpy(copied_data, pkt, data_length);
+    info->pkt = (lora_pkt_t *)copied_data;
+
+    event_t *event = create_event(EVENT_TYPE_NOTIFICATION, UI_EVENT_SND_LORA,
+                                  info, sizeof(lora_info_t) + data_length);
+    if (event) {
+        event_dispatcher_post(event);
+    }
 
     free(pkt);
 }

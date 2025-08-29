@@ -5,8 +5,9 @@
 #include "lora_types.h"
 #include "lora_events.h"
 
-void init_lora_sx127x();
-void start_lora_sender();
-void start_lora_receiver();
+void esp_lora_start_sender();
+void esp_lora_start_receiver();
+
+void esp_lora_transmit_packet();
 
 #endif // !ESP_LORA_H

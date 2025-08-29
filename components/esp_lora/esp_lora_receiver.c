@@ -44,11 +44,10 @@ void rx_callback(sx127x *device, uint8_t *data, uint16_t data_length) {
              pkt->sender_id, pkt->recipient_id, pkt->message_id, payload_str,
              rssi, snr, frequency_error);
 
-    lora_info_t *info = malloc(sizeof(lora_info_t) + data_length);
+    lora_info_t *info = (lora_info_t *)malloc(sizeof(lora_info_t) + data_length);
     info->rssi = rssi;
     info->snr = snr;
     info->freq_err = frequency_error;
-    info->pkt = pkt;
     info->pkt_size = data_length;
 
     uint8_t *copied_data = (uint8_t *)(info + 1);
