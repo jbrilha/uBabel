@@ -112,9 +112,11 @@ static void handle_ui_notif(event_t *e) {
     } break;
     case UI_EVENT_REC_LORA: {
         lora_rec_widget_set_info_from_event(e);
+            break;
     }
     case UI_EVENT_SND_LORA: {
         lora_sndr_widget_send_transmission(e);
+            break;
     }
     default:
         break;

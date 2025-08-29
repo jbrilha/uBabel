@@ -1,5 +1,5 @@
-#include "esp_log.h"
 #include "lvgl_lora_receiver_widget.h"
+#include "esp_log.h"
 
 #include "lora_types.h"
 #include <stdio.h>
@@ -20,6 +20,7 @@ static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *rssi_bar = NULL;
 static lv_obj_t *snr_bar = NULL;
 static lv_obj_t *sender_txt = NULL;
+static lv_obj_t *recipient_txt = NULL;
 static lv_obj_t *message_id_txt = NULL;
 static lv_obj_t *freq_err_txt = NULL;
 static lv_obj_t *message_txt = NULL;
@@ -157,7 +158,8 @@ static lv_obj_t *create_bar(lv_obj_t *container, const char *lbl_txt, char *fmt,
     lv_bar_set_range(new_bar, min, max);
 
     if (rssi) {
-        lv_obj_add_event_cb(new_bar, rssi_event_cb, LV_EVENT_DRAW_MAIN_END, fmt);
+        lv_obj_add_event_cb(new_bar, rssi_event_cb, LV_EVENT_DRAW_MAIN_END,
+                            fmt);
     } else {
         lv_obj_add_event_cb(new_bar, snr_event_cb, LV_EVENT_DRAW_MAIN_END, fmt);
     }
@@ -203,7 +205,7 @@ static lv_obj_t *create_scrolling_text(lv_obj_t *container, bool underline,
     } else {
 
         lv_label_set_long_mode(txt, LV_LABEL_LONG_MODE_WRAP);
-        lv_obj_set_size(txt, 230, 120);
+        lv_obj_set_size(txt, 230, 100);
         lv_obj_set_scrollbar_mode(txt, LV_SCROLLBAR_MODE_AUTO);
 
         lv_obj_set_style_border_color(txt, lv_color_black(), 0);
@@ -247,6 +249,10 @@ static lv_obj_t *create_text(lv_obj_t *container, bool underline,
 
 static lv_obj_t *create_sender_txt(lv_obj_t *container) {
     return create_scrolling_text(container, true, "Sender:", "Nobody at all");
+}
+
+static lv_obj_t *create_recipient_txt(lv_obj_t *container) {
+    return create_scrolling_text(container, true, "Recipient:", "Me");
 }
 
 static lv_obj_t *create_message_txt(lv_obj_t *container) {
@@ -330,12 +336,25 @@ void lora_rec_widget_set_sender_txt(const char *sender) {
     }
 }
 
+void lora_rec_widget_set_recipient_txt(const char *recipient) {
+    if (recipient_txt && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        lv_label_set_text(recipient_txt, recipient);
+        _lock_release(lvgl_lock);
+    }
+}
+
 void lora_rec_widget_set_info_from_event(event_t *e) {
     lora_info_t info = *(lora_info_t *)e->payload;
 
     char sender_str[8];
     snprintf(sender_str, sizeof(sender_str), "0x%02X", info.pkt->sender_id);
     lora_rec_widget_set_sender_txt(sender_str);
+
+    char recipient_str[8];
+    snprintf(recipient_str, sizeof(recipient_str), "0x%02X",
+             info.pkt->recipient_id);
+    lora_rec_widget_set_recipient_txt(recipient_str);
 
     char msg_id_str[8];
     snprintf(msg_id_str, sizeof(msg_id_str), "%d", info.pkt->message_id);
@@ -351,7 +370,7 @@ void lora_rec_widget_set_info_from_event(event_t *e) {
     lora_rec_widget_set_message_txt(payload_str);
 }
 
-void lora_receiver_widget_init(lv_display_t *disp, _lock_t *lock) {
+void lora_rec_widget_init(lv_display_t *disp, _lock_t *lock) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
     lora_rec_widget_init_on_container(scr, lock);
@@ -374,6 +393,9 @@ void lora_rec_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
 
         if (!sender_txt) {
             sender_txt = create_sender_txt(bars_container);
+        }
+        if (!recipient_txt) {
+            recipient_txt = create_recipient_txt(bars_container);
         }
         if (!message_id_txt) {
             message_id_txt = create_message_id_txt(bars_container);
