@@ -3,6 +3,7 @@ set(COMP_SRCS
     lvgl_temperature_widget.c
     lvgl_messenger_widget.c
     lvgl_lora_receiver_widget.c
+    lvgl_lora_sender_widget.c
 )
 
 idf_component_register(SRCS ${COMP_SRCS}
