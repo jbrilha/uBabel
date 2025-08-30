@@ -18,7 +18,8 @@ void iot_control_protocol_init();
 
 iot_node_handler_t initialize_device_iterator();
 iot_node_handler_t next_device(iot_node_handler_t device);
-bool print_device_identifier(iot_node_handler_t device, const char* str);
+iot_node_handler_t previous_device(iot_node_handler_t device);
+bool print_device_identifier(iot_node_handler_t device, char* str);
 bool device_has_led(iot_node_handler_t device);
 bool activate_led(iot_node_handler_t device);
 

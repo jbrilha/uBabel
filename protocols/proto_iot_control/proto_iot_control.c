@@ -32,8 +32,6 @@ static QueueHandle_t iot_control_queue;
 static device_node_t* peers;
 
 static device_node_t* register_new_participant(event_t* neighbor_up_event) {
-  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
-
   device_node_t* node = (device_node_t*) malloc(sizeof(device_node_t));
   if(node != NULL) {
     memcpy(node->id, (uint8_t*) neighbor_up_event->payload, UUID_SIZE);
@@ -42,24 +40,19 @@ static device_node_t* register_new_participant(event_t* neighbor_up_event) {
     node->next = peers;
     peers = node;
   }
-
-  xSemaphoreGive(iot_control_protocol_mutex);
   return node;
 } 
 
 static device_node_t* find_participant(int8_t* id) {
-  xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
-
   device_node_t* current = peers;
   while(current != NULL) {
-    if(memcpy(current->id, id, UUID_SIZE) == 0) {
+    if(memcmp(current->id, id, UUID_SIZE) == 0) {
       xSemaphoreGive(iot_control_protocol_mutex);
       return current;
     }
     current = current->next;
   }
 
-  xSemaphoreGive(iot_control_protocol_mutex);
   return NULL;
 }
 
@@ -204,9 +197,7 @@ iot_node_handler_t next_device(iot_node_handler_t device) {
   xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
 
   device_node_t* current = peers;
-  while(current != NULL) {
-    if ( current == (device_node_t*) device )
-      break;
+  while(current != NULL && current != (device_node_t*) device) {
     current = current->next;
   }
 
@@ -222,6 +213,7 @@ iot_node_handler_t next_device(iot_node_handler_t device) {
 iot_node_handler_t previous_device(iot_node_handler_t device) {
   if(device == NULL)
     return (iot_node_handler_t) peers;
+
 
   xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
 
@@ -246,34 +238,38 @@ iot_node_handler_t previous_device(iot_node_handler_t device) {
 
   if(current != NULL) {
     xSemaphoreGive(iot_control_protocol_mutex);
+    LOG_INFO(TAG,"7");
     return (iot_node_handler_t) previous;
   } else {
     xSemaphoreGive(iot_control_protocol_mutex);
+    LOG_INFO(TAG,"8");
     return (iot_node_handler_t) peers;
   }
-
-
 }
 
-bool print_device_identifier(iot_node_handler_t device, const char* str) {
+bool print_device_identifier(iot_node_handler_t device, char* str) {
   if(device == NULL)
-    return false;
+    sprintf(str, "NO DEVICE SELECTED");
 
   xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
 
   device_node_t* current = peers;
-  while(current != NULL) {
-    if ( current == (device_node_t*) device )
-      break;
+  while(current != NULL && current != (device_node_t*) device) {
     current = current->next;
   }
 
   if(current != NULL) {
-    char* s = uuid_to_string(current->id);
-    memcpy(str, s, strlen(s));
+   sprintf(str,
+          "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+          current->id[0], current->id[1], current->id[2], current->id[3],
+          current->id[4], current->id[5],
+          current->id[6], current->id[7],
+          current->id[8], current->id[9],
+          current->id[10], current->id[11], current->id[12], current->id[13], current->id[14], current->id[15]);
     xSemaphoreGive(iot_control_protocol_mutex);
     return true;
   } else {
+    sprintf(str, "NO DEVICE SELECTED");
     xSemaphoreGive(iot_control_protocol_mutex);
     return false;
   }  

@@ -50,6 +50,7 @@ static const char *TAG = "PICO_MAIN";
 #define MAIN_TASK_PRIORITY (tskIDLE_PRIORITY + 2UL)
 #define SCROLL_TASK_PRIORITY (tskIDLE_PRIORITY + 1UL)
 #define UNICORN_TASK_PRIORITY (tskIDLE_PRIORITY + 1UL)
+#define MAIN_APP_PRIORITY (tskIDLE_PRIORITY + 2UL)
 #define WORKER_TASK_PRIORITY (tskIDLE_PRIORITY + 4UL)
 
 // Stack sizes of our threads in words (4 bytes)
@@ -57,6 +58,91 @@ static const char *TAG = "PICO_MAIN";
 #define SCROLL_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define UNICORN_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 #define WORKER_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
+
+#define REQUEST_PRINT 800
+#define REQUEST_SHOW  801
+
+static void print_device(iot_node_handler_t device) {
+    static char device_id[16*2+5];
+    memset(device_id, 0, 16*2+5);
+
+    char* text = (char*) malloc(256);
+
+    if(text != NULL) {
+        memset(text, 0, 256);
+        printf("Going to print the node identifier to a textual representation\n");
+        print_device_identifier(device, device_id);
+        printf("Got the node identifier %s\n", device_id);
+        sprintf(text, "Current device: %s", device_id);
+        event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_PRINT, text, 256);
+        
+        if(print_event == NULL || !event_dispatcher_post(print_event)) {
+            if(print_event != NULL) {
+                free_event(print_event);
+            } else {
+                free(text);
+            }
+        }
+    }
+}
+
+QueueHandle_t application_queue;
+iot_node_handler_t node_handle;
+
+void application_task(void *pvParameters) {
+    char output[256];
+    event_t* event = NULL;
+
+    while (true) {
+        memset(output, 0, 256); // Clear text buffer
+        if(xQueueReceive(application_queue, &event, portMAX_DELAY) == pdTRUE) {
+            printf("Application main loop has received event: type=%d subtype=%d\n", event->type, event->subtype);
+
+            if(event->type == EVENT_TYPE_NOTIFICATION) {
+
+                if(event->subtype == EVENT_BUTTON_A_PRESSED) {
+                    //Rotate on device
+                    printf("Application main loop, button A\n");
+                    printf("Application main loop, finished processing button A\n");
+                } else if(event->subtype == EVENT_BUTTON_B_PRESSED) {
+                    //move to previous device
+                    printf("Application main loop, button B\n");
+                    node_handle = previous_device(node_handle);
+                    printf("Was able to compute a previous node_handle %snull\n", node_handle!=NULL?"not ":"");
+                    print_device(node_handle);
+                    printf("Application main loop, finished processing button B\n");
+                } else if(event->subtype == EVENT_BUTTON_X_PRESSED) {
+                    //execute action
+                    printf("Application main loop, button X\n");
+                    printf("Application main loop, finished processing button X\n");
+                } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
+                    //move to next device
+                    printf("Application main loop, button Y\n");
+                    node_handle = next_device(node_handle);
+                    print_device(node_handle);
+                    printf("Application main loop, finished processing button Y\n");
+                }
+
+            }
+        
+            free_event(event);
+            event = NULL;
+        }
+    }
+}
+
+void application_init() {
+    application_queue = xQueueCreate(10, sizeof(event_t*));
+    event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_A_PRESSED);
+    event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_B_PRESSED);
+    event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_X_PRESSED);
+    event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_Y_PRESSED); 
+
+    node_handle = initialize_device_iterator();
+
+    xTaskCreate(application_task, "main_app_task", configMINIMAL_STACK_SIZE, NULL,
+                MAIN_APP_PRIORITY, NULL);
+}
 
 void wifi_connect_task(void *pvParameters) {
     printf("Wi-Fi task started\n");
@@ -98,6 +184,9 @@ void scroll_task_init() {
 
     event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_UP);
     event_dispatcher_register(scroll_event_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_DOWN);
+
+    event_dispatcher_register(scroll_event_queue, EVENT_TYPE_REQUEST, REQUEST_PRINT);
+    event_dispatcher_register(scroll_event_queue, EVENT_TYPE_REQUEST, REQUEST_SHOW);
 }
 
 void scroll_task(__unused void *params) {
@@ -135,13 +224,20 @@ void scroll_task(__unused void *params) {
                     sprintf(text, "Neighbor down: %s", uuid_to_string((uint8_t*) event->payload));
                     pico_scroll_scroll_text(text, 255, 10);
                 }
+            } else if (event->type == EVENT_TYPE_REQUEST) {
+                if(event->subtype == REQUEST_PRINT) {
+                    memcpy(text, event->payload, strlen((char*)event->payload));
+                    pico_scroll_scroll_text(text, 255, 20);
+                } else if (event->subtype == REQUEST_SHOW) {
+                    memcpy(text, event->payload, strlen((char*) event->payload));
+                    pico_scroll_set_text(text, 255);
+                }
             }
 
             free_event(event);
         }
     }
 }
-
 
 QueueHandle_t unicorn_event_queue;
 
@@ -288,6 +384,8 @@ void main_task(__unused void *params) {
 
     simple_overlay_network_init();
     iot_control_protocol_init();
+
+    application_init();
 
     vTaskDelete(NULL);
 }
