@@ -1,8 +1,7 @@
-#include "lvgl_lora_widget.h"
+#include "lvgl_lora_receiver_widget.h"
 #include "esp_log.h"
-#include "misc/lv_color.h"
-#include "misc/lv_style.h"
-#include "widgets/label/lv_label.h"
+
+#include "lora_types.h"
 #include <stdio.h>
 
 #define RSSI_BAR_MIN (-157)
@@ -21,6 +20,7 @@ static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *rssi_bar = NULL;
 static lv_obj_t *snr_bar = NULL;
 static lv_obj_t *sender_txt = NULL;
+static lv_obj_t *recipient_txt = NULL;
 static lv_obj_t *message_id_txt = NULL;
 static lv_obj_t *freq_err_txt = NULL;
 static lv_obj_t *message_txt = NULL;
@@ -43,7 +43,7 @@ static void init_style(lv_style_t *style, bool rssi) {
     lv_style_set_bg_grad_dir(style, LV_GRAD_DIR_HOR);
 }
 
-static void lora_widget_animate_to_val_unsafe(lv_obj_t *obj, int32_t val) {
+static void lora_rec_widget_animate_to_val_unsafe(lv_obj_t *obj, int32_t val) {
     lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_exec_cb(&a, set_val);
@@ -58,7 +58,7 @@ static void btn_cb(lv_event_t *e) {
     // todo send request via event queue
 }
 
-static void event_cb(lv_event_t *e) {
+static void rssi_event_cb(lv_event_t *e) {
     const char *fmt = (const char *)lv_event_get_user_data(e);
     lv_obj_t *obj = lv_event_get_target_obj(e);
 
@@ -92,7 +92,7 @@ static void event_cb(lv_event_t *e) {
     lv_draw_label(layer, &label_dsc, &txt_area);
 }
 
-static void event_cb_e(lv_event_t *e) {
+static void snr_event_cb(lv_event_t *e) {
     const char *fmt = (const char *)lv_event_get_user_data(e);
     lv_obj_t *obj = lv_event_get_target_obj(e);
 
@@ -158,10 +158,10 @@ static lv_obj_t *create_bar(lv_obj_t *container, const char *lbl_txt, char *fmt,
     lv_bar_set_range(new_bar, min, max);
 
     if (rssi) {
-        lv_obj_add_event_cb(new_bar, event_cb, LV_EVENT_DRAW_MAIN_END, fmt);
-
+        lv_obj_add_event_cb(new_bar, rssi_event_cb, LV_EVENT_DRAW_MAIN_END,
+                            fmt);
     } else {
-        lv_obj_add_event_cb(new_bar, event_cb_e, LV_EVENT_DRAW_MAIN_END, fmt);
+        lv_obj_add_event_cb(new_bar, snr_event_cb, LV_EVENT_DRAW_MAIN_END, fmt);
     }
 
     return new_bar;
@@ -205,7 +205,7 @@ static lv_obj_t *create_scrolling_text(lv_obj_t *container, bool underline,
     } else {
 
         lv_label_set_long_mode(txt, LV_LABEL_LONG_MODE_WRAP);
-        lv_obj_set_size(txt, 230, 120);
+        lv_obj_set_size(txt, 230, 100);
         lv_obj_set_scrollbar_mode(txt, LV_SCROLLBAR_MODE_AUTO);
 
         lv_obj_set_style_border_color(txt, lv_color_black(), 0);
@@ -251,6 +251,10 @@ static lv_obj_t *create_sender_txt(lv_obj_t *container) {
     return create_scrolling_text(container, true, "Sender:", "Nobody at all");
 }
 
+static lv_obj_t *create_recipient_txt(lv_obj_t *container) {
+    return create_scrolling_text(container, true, "Recipient:", "Me");
+}
+
 static lv_obj_t *create_message_txt(lv_obj_t *container) {
     return create_scrolling_text(container, false,
                                  "Message:", "Nothing to show");
@@ -264,7 +268,7 @@ static lv_obj_t *create_freq_err_txt(lv_obj_t *container) {
     return create_text(container, true, "Freq Err:", "312Hz");
 }
 
-void lora_widget_set_rssi(int32_t rssi) {
+void lora_rec_widget_set_rssi(int32_t rssi) {
     if (rssi_bar && lvgl_lock) {
         _lock_acquire(lvgl_lock);
         lv_bar_set_value(rssi_bar, rssi, LV_ANIM_OFF);
@@ -272,15 +276,15 @@ void lora_widget_set_rssi(int32_t rssi) {
     }
 }
 
-void lora_widget_animate_to_rssi(int32_t rssi) {
+void lora_rec_widget_animate_to_rssi(int32_t rssi) {
     if (rssi_bar && lvgl_lock) {
         _lock_acquire(lvgl_lock);
-        lora_widget_animate_to_val_unsafe(rssi_bar, rssi);
+        lora_rec_widget_animate_to_val_unsafe(rssi_bar, rssi);
         _lock_release(lvgl_lock);
     }
 }
 
-void lora_widget_set_snr(float snr) {
+void lora_rec_widget_set_snr(float snr) {
     if (snr_bar && lvgl_lock) {
         _lock_acquire(lvgl_lock);
         int32_t snr_scaled = (int32_t)(snr * 10.0f);
@@ -289,16 +293,16 @@ void lora_widget_set_snr(float snr) {
     }
 }
 
-void lora_widget_animate_to_snr(float snr) {
+void lora_rec_widget_animate_to_snr(float snr) {
     if (snr_bar && lvgl_lock) {
         _lock_acquire(lvgl_lock);
         int32_t snr_scaled = (int32_t)(snr * 10.0f);
-        lora_widget_animate_to_val_unsafe(snr_bar, snr_scaled);
+        lora_rec_widget_animate_to_val_unsafe(snr_bar, snr_scaled);
         _lock_release(lvgl_lock);
     }
 }
 
-void lora_widget_set_freq_err(int32_t err) {
+void lora_rec_widget_set_freq_err(int32_t err) {
     if (freq_err_txt && lvgl_lock) {
         _lock_acquire(lvgl_lock);
         char str[16];
@@ -308,7 +312,7 @@ void lora_widget_set_freq_err(int32_t err) {
     }
 }
 
-void lora_widget_set_message_id(const char *id) {
+void lora_rec_widget_set_message_id_txt(const char *id) {
     if (message_id_txt && lvgl_lock) {
         _lock_acquire(lvgl_lock);
         lv_label_set_text(message_id_txt, id);
@@ -316,7 +320,7 @@ void lora_widget_set_message_id(const char *id) {
     }
 }
 
-void lora_widget_set_message_txt(const char *txt) {
+void lora_rec_widget_set_message_txt(const char *txt) {
     if (message_txt && lvgl_lock) {
         _lock_acquire(lvgl_lock);
         lv_label_set_text(message_txt, txt);
@@ -324,7 +328,7 @@ void lora_widget_set_message_txt(const char *txt) {
     }
 }
 
-void lora_widget_set_sender_txt(const char *sender) {
+void lora_rec_widget_set_sender_txt(const char *sender) {
     if (sender_txt && lvgl_lock) {
         _lock_acquire(lvgl_lock);
         lv_label_set_text(sender_txt, sender);
@@ -332,13 +336,47 @@ void lora_widget_set_sender_txt(const char *sender) {
     }
 }
 
-void lora_widget_init(lv_display_t *disp, _lock_t *lock) {
-    lv_obj_t *scr = lv_display_get_screen_active(disp);
-
-    lora_widget_init_on_container(scr, lock);
+void lora_rec_widget_set_recipient_txt(const char *recipient) {
+    if (recipient_txt && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        lv_label_set_text(recipient_txt, recipient);
+        _lock_release(lvgl_lock);
+    }
 }
 
-void lora_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
+void lora_rec_widget_set_info_from_event(event_t *e) {
+    lora_info_t info = *(lora_info_t *)e->payload;
+
+    char sender_str[8];
+    snprintf(sender_str, sizeof(sender_str), "0x%02X", info.pkt->sender_id);
+    lora_rec_widget_set_sender_txt(sender_str);
+
+    char recipient_str[8];
+    snprintf(recipient_str, sizeof(recipient_str), "0x%02X",
+             info.pkt->recipient_id);
+    lora_rec_widget_set_recipient_txt(recipient_str);
+
+    char msg_id_str[8];
+    snprintf(msg_id_str, sizeof(msg_id_str), "%d", info.pkt->message_id);
+    lora_rec_widget_set_message_id_txt(msg_id_str);
+
+    lora_rec_widget_animate_to_rssi(info.rssi);
+    lora_rec_widget_animate_to_snr(info.snr);
+    lora_rec_widget_set_freq_err(info.freq_err);
+
+    char payload_str[info.pkt->payload_len + 1];
+    memcpy(payload_str, info.pkt->payload, info.pkt->payload_len);
+    payload_str[info.pkt->payload_len] = '\0';
+    lora_rec_widget_set_message_txt(payload_str);
+}
+
+void lora_rec_widget_init(lv_display_t *disp, _lock_t *lock) {
+    lv_obj_t *scr = lv_display_get_screen_active(disp);
+
+    lora_rec_widget_init_on_container(scr, lock);
+}
+
+void lora_rec_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
     lvgl_lock = lock;
 
     if (lvgl_lock) {
@@ -355,6 +393,9 @@ void lora_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
 
         if (!sender_txt) {
             sender_txt = create_sender_txt(bars_container);
+        }
+        if (!recipient_txt) {
+            recipient_txt = create_recipient_txt(bars_container);
         }
         if (!message_id_txt) {
             message_id_txt = create_message_id_txt(bars_container);
@@ -373,9 +414,4 @@ void lora_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
         }
         _lock_release(lvgl_lock);
     }
-}
-
-lv_obj_t *lora_get_widget() {
-    // TODO
-    return NULL;
 }

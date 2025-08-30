@@ -1,24 +1,22 @@
-#include "ui_event_manager.h"
+#include "ui_event_monitor.h"
 
-#include "event.h"
 #include "event_dispatcher.h"
-#include "freertos/projdefs.h"
+#include "lora_events.h"
 #include "lvgl_ui.h"
 
-#define UI_MANAGER_TASK_STACK_SIZE (4 * 1024)
-#define UI_MANAGER_TASK_PRIORITY 2
-
+#define UI_MONITOR_TASK_STACK_SIZE (4 * 1024)
+#define UI_MONITOR_TASK_PRIORITY 2
 
 #define Q_LEN 10
 
-static const char *TAG = "UI_EVENT_MANAGER";
+static const char *TAG = "UI_EVENT_MONITOR";
 
 QueueHandle_t ui_event_queue;
 
 static void handle_ui_notif(event_t *e);
 static void handle_ui_request(event_t *e);
 
-void ui_event_test_task(void *pvParameters) {
+static void ui_event_test_task(void *pvParameters) {
 
     vTaskDelay(pdMS_TO_TICKS(2000));
 
@@ -55,27 +53,7 @@ void ui_event_test_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void ui_event_manager_init(void) {
-
-    ui_event_queue = xQueueCreate(Q_LEN, sizeof(event_t *));
-    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-                              UI_EVENT_REC_TEMP);
-    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-                              UI_EVENT_REC_MSG);
-
-    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-                              UI_EVENT_REC_LORA);
-
-    xTaskCreate(ui_event_manager_task, "UI_EVENT_MANAGER_TASK",
-                UI_MANAGER_TASK_STACK_SIZE, NULL, UI_MANAGER_TASK_PRIORITY,
-                NULL);
-
-    // xTaskCreate(ui_event_test_task, "UI_EVENT_TEST_TASK",
-    //             UI_MANAGER_TASK_STACK_SIZE, NULL, UI_MANAGER_TASK_PRIORITY,
-    //             NULL);
-}
-
-void ui_event_manager_task(void *pvParameters) {
+static void ui_event_monitor_task(void *pvParameters) {
     event_t *event = NULL;
 
     while (true) {
@@ -98,6 +76,28 @@ void ui_event_manager_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
+void ui_event_monitor_init(void) {
+    ui_event_queue = xQueueCreate(Q_LEN, sizeof(event_t *));
+
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              UI_EVENT_REC_TEMP);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              UI_EVENT_REC_MSG);
+
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              UI_EVENT_REC_LORA);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              UI_EVENT_SND_LORA);
+
+    xTaskCreate(ui_event_monitor_task, "UI_EVENT_MONITOR_TASK",
+                UI_MONITOR_TASK_STACK_SIZE, NULL, UI_MONITOR_TASK_PRIORITY,
+                NULL);
+
+    // xTaskCreate(ui_event_test_task, "UI_EVENT_TEST_TASK",
+    //             UI_MONITOR_TASK_STACK_SIZE, NULL, UI_MONITOR_TASK_PRIORITY,
+    //             NULL);
+}
+
 static void handle_ui_notif(event_t *e) {
     switch (e->subtype) {
     case UI_EVENT_REC_MSG: {
@@ -111,11 +111,12 @@ static void handle_ui_notif(event_t *e) {
 
     } break;
     case UI_EVENT_REC_LORA: {
-        lora_payload_t lp = *(lora_payload_t *)e->payload;
-        lora_widget_animate_to_rssi(lp.rssi);
-        lora_widget_animate_to_snr(lp.snr);
-        lora_widget_set_freq_err(lp.freq_err);
-        lora_widget_set_message_txt((const char *)lp.payload);
+        lora_rec_widget_set_info_from_event(e);
+            break;
+    }
+    case UI_EVENT_SND_LORA: {
+        lora_sndr_widget_send_transmission(e);
+            break;
     }
     default:
         break;

@@ -15,8 +15,8 @@
 #include "network_manager.h"
 
 #include "esp_lora.h"
-#include "spi_lcd_touch.h"
 #include "spi_manager.h"
+#include "ui_manager.h"
 
 static const char *TAG = "M5_MAIN";
 
@@ -34,16 +34,14 @@ void app_main(void) {
     event_dispatcher_init();
 
     spi_manager_init();
-    // LORA INIT MUST COME BEFORE LCD INIT due to SPI shenanigans
-    // start_lora_sender();
-    start_lora_receiver();
 
-    xTaskCreate(lcd_init_task,   // Task function
-                "lcd_init_task", // Task name
-                4096,            // Stack size in words
-                NULL,            // Task parameters
-                1,               // Priority
-                NULL             // Task handle
-    );
+    ui_manager_init();
 
+#if M5STACK_RECEIVER
+    ui_manager_set_lora_rec_widget();
+    esp_lora_start_receiver();
+#else
+    ui_manager_set_lora_sndr_widget();
+    esp_lora_start_sender();
+#endif
 }

@@ -24,6 +24,17 @@ m5core:
 	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
+m5core-sender:
+	@echo "Building for M5Stack Core Basic..."
+	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_SENDER=1 build
+	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
+
+m5core-receiver:
+	@echo "Building for M5Stack Core Basic..."
+	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_RECEIVER=1 build
+	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
+
+
 clean: clean-pico clean-esp32
 
 clean-pico:
