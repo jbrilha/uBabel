@@ -9,6 +9,9 @@
 #define  DEVICE_TYPE_LED_MATRIX 2
 #define  DEVICE_TYPE_LCD_DISPLAY 3
 
+#define DEVICE_ACTION_ON 1
+#define DEVICE_ACTION_OFF 2
+
 typedef void* iot_node_handle_t;
 typedef signed char iot_device_handle_t;
 
@@ -32,7 +35,7 @@ iot_device_handle_t previous_device(iot_node_handle_t node, iot_device_handle_t 
 
 uint8_t get_device_type(iot_node_handle_t node, iot_device_handle_t device);
 
-bool activate_led(iot_node_handle_t node);
+bool device_action(iot_node_handle_t node, iot_device_handle_t device);
 
 #ifdef __cplusplus
 }

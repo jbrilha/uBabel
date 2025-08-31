@@ -466,12 +466,57 @@ uint8_t get_device_type(iot_node_handle_t node, iot_device_handle_t device) {
     return current->devices[device];
 } 
 
-bool activate_led(iot_node_handle_t node) {
+bool device_action(iot_node_handle_t node, iot_device_handle_t device) {
+   LOG_INFO(TAG, "Going to send a request for activating a device");
+
   if(node == NULL)
     return false;
 
   xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
 
-  
+  LOG_INFO(TAG, "Entered protected region to send device request");
+
+  device_node_t* current = peers;
+  while(current != NULL && current != (device_node_t*) node) {
+    current = current->next;
+  }
+
+  if(current != NULL && device < current->n_devices) {
+
+    uint16_t* payload = malloc(sizeof(uint16_t) * 2);
+                    
+    if(payload != NULL) {
+      payload[0] = htons(current->devices[device]);
+      payload[1] = htons(DEVICE_ACTION_ON);
+                        
+      message_t* activation_operation = create_message(MSG_CMD, id, IOT_CONTROL_PROTO_ID, current->id, IOT_CONTROL_PROTO_ID, (uint8_t*) payload, sizeof(uint16_t) * 2);
+
+      if(activation_operation != NULL) {
+        event_t * ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, activation_operation, sizeof(message_t));
+        if(ev != NULL && !send_message(ev, current->id)) {
+          if(ev != NULL) {
+            free_event(ev);
+          } else {
+            free_message(activation_operation);
+          }
+          xSemaphoreGive(iot_control_protocol_mutex);
+          LOG_INFO(TAG, "Attempted to prepare the request but failed to sent.");
+          return false;
+        } else {
+          xSemaphoreGive(iot_control_protocol_mutex);
+          LOG_INFO(TAG, "Sent the request");
+          return true;
+        }
+      } else {
+        free(payload);
+        xSemaphoreGive(iot_control_protocol_mutex);
+        LOG_INFO(TAG, "Failed to allocate the message_t instance");
+        return false;
+      }
+    }
+  }
+   
   xSemaphoreGive(iot_control_protocol_mutex);
+  LOG_INFO(TAG, "Not sent the request ");
+  return false;
 }

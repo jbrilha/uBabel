@@ -87,6 +87,7 @@ static void scroll_node(iot_node_handle_t device) {
 }
 
 static void show_device(iot_node_handle_t node_handle, iot_device_handle_t device_handle) {
+    
     char* text = (char*) malloc(9);
 
     if(text != NULL) {
@@ -121,7 +122,7 @@ static void show_device(iot_node_handle_t node_handle, iot_device_handle_t devic
             }        
         }
         
-        event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_SHOW, text, 8);
+        event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_PRINT, text, 8);
         if(print_event == NULL || !event_dispatcher_post(print_event)) {
             if(print_event != NULL) {
                 free_event(print_event);
@@ -177,7 +178,8 @@ void application_task(void *pvParameters) {
                     
                 } else if(event->subtype == EVENT_BUTTON_X_PRESSED) {
                     //execute action
-                    
+                    if(nav == node)
+                        device_action(node_handle, device_handle);
                 } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
                     //move to next device
                     if(nav == outside) {
