@@ -62,7 +62,7 @@ static const char *TAG = "PICO_MAIN";
 #define REQUEST_PRINT 800
 #define REQUEST_SHOW  801
 
-static void print_device(iot_node_handler_t device) {
+static void scroll_node(iot_node_handle_t device) {
     static char device_id[16*2+5];
     memset(device_id, 0, 16*2+5);
 
@@ -71,7 +71,7 @@ static void print_device(iot_node_handler_t device) {
     if(text != NULL) {
         memset(text, 0, 256);
         printf("Going to print the node identifier to a textual representation\n");
-        print_device_identifier(device, device_id);
+        print_node_identifier(device, device_id);
         printf("Got the node identifier %s\n", device_id);
         sprintf(text, "Current device: %s", device_id);
         event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_PRINT, text, 256);
@@ -86,8 +86,62 @@ static void print_device(iot_node_handler_t device) {
     }
 }
 
-QueueHandle_t application_queue;
-iot_node_handler_t node_handle;
+static void show_device(iot_node_handle_t node_handle, iot_device_handle_t device_handle) {
+    char* text = (char*) malloc(9);
+
+    if(text != NULL) {
+        memset(text,0, 9);
+        LOG_INFO(TAG, "Going to print a device with device_handle %d", device_handle);
+        if(device_handle < 0) {
+            switch(device_handle) {
+            case NO_DEVICE:
+                sprintf(text, "NO DEV");
+                break;
+            case INVALID_NODE:
+            default:  
+                sprintf(text, "ERR NODE");
+                break;      
+            }        
+        } else {
+            uint8_t device_type = get_device_type(node_handle, device_handle);
+            LOG_INFO(TAG, "Going to print a device with device type %d", device_type);
+            switch(device_type) {
+            case DEVICE_TYPE_LED_RGB:
+                sprintf(text, "LED");
+                break;
+            case DEVICE_TYPE_LED_MATRIX:
+                sprintf(text, "MATRIX");
+                break;
+            case DEVICE_TYPE_LCD_DISPLAY:
+                sprintf(text, "LCD");
+                break;
+            default:  
+                sprintf(text, "ERR TYPE");
+                break;      
+            }        
+        }
+        
+        event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_SHOW, text, 8);
+        if(print_event == NULL || !event_dispatcher_post(print_event)) {
+            if(print_event != NULL) {
+                free_event(print_event);
+            } else {
+                free(text);
+            }
+        }
+    }
+}
+
+typedef enum {
+    outside,
+    node,
+    device
+} navigation_mode_t;
+
+static QueueHandle_t application_queue;
+static iot_node_handle_t node_handle;
+static iot_device_handle_t device_handle;
+static navigation_mode_t nav;
 
 void application_task(void *pvParameters) {
     char output[256];
@@ -101,30 +155,41 @@ void application_task(void *pvParameters) {
             if(event->type == EVENT_TYPE_NOTIFICATION) {
 
                 if(event->subtype == EVENT_BUTTON_A_PRESSED) {
-                    //Rotate on device
-                    printf("Application main loop, button A\n");
-                    printf("Application main loop, finished processing button A\n");
+                    //enter/exit from outside to node
+                    if(nav == outside) {
+                        nav = node;
+                        device_handle = initialize_device_iterator(node_handle);
+                        printf("Main Action, device handle is: %d\n", device_handle);
+                        show_device(node_handle, device_handle);
+                    } else if (nav == node) {
+                        nav = outside;
+                        scroll_node(node_handle);
+                    }
                 } else if(event->subtype == EVENT_BUTTON_B_PRESSED) {
                     //move to previous device
-                    printf("Application main loop, button B\n");
-                    node_handle = previous_device(node_handle);
-                    printf("Was able to compute a previous node_handle %snull\n", node_handle!=NULL?"not ":"");
-                    print_device(node_handle);
-                    printf("Application main loop, finished processing button B\n");
+                    if(nav == outside) {
+                        node_handle = previous_node(node_handle);
+                        scroll_node(node_handle);                        
+                    } else if (nav == node) {
+                        device_handle = previous_device(node_handle, device_handle);
+                        show_device(node_handle, device_handle);
+                    }
+                    
                 } else if(event->subtype == EVENT_BUTTON_X_PRESSED) {
                     //execute action
-                    printf("Application main loop, button X\n");
-                    printf("Application main loop, finished processing button X\n");
+                    
                 } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
                     //move to next device
-                    printf("Application main loop, button Y\n");
-                    node_handle = next_device(node_handle);
-                    print_device(node_handle);
-                    printf("Application main loop, finished processing button Y\n");
+                    if(nav == outside) {
+                        node_handle = next_node(node_handle);
+                        scroll_node(node_handle);
+                    } else if (nav == node) {
+                        device_handle = next_device(node_handle, device_handle);
+                        show_device(node_handle, device_handle); 
+                        
+                    }
                 }
-
             }
-        
             free_event(event);
             event = NULL;
         }
@@ -138,7 +203,9 @@ void application_init() {
     event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_X_PRESSED);
     event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_Y_PRESSED); 
 
-    node_handle = initialize_device_iterator();
+    nav = outside;
+
+    node_handle = initialize_node_iterator();
 
     xTaskCreate(application_task, "main_app_task", configMINIMAL_STACK_SIZE, NULL,
                 MAIN_APP_PRIORITY, NULL);

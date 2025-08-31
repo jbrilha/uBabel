@@ -580,9 +580,10 @@ static void handle_tcp_client(node_register_t *participant)
     if(payload_len < 2 || !receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
         LOG_INFO(TAG, "Failed to read payloadSize from socket %d", participant->tcp_socket);
         goto hard_fail;
-    }
+    } 
 
     message->payload_size = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
+    LOG_INFO(TAG, "The payload size of the message that I am receiving is: %d", message->payload_size);
 
     if(message->payload_size > 0) {
       message->payload = (uint8_t*) malloc(message->payload_size);
@@ -600,13 +601,15 @@ static void handle_tcp_client(node_register_t *participant)
 
     // 4) Post event
     event_t *event = create_event(EVENT_TYPE_MESSAGE, msg_code, message, sizeof(message_t));
-    event->proto_source = MICRO_BABEL_DISCOVERY_PROTO;
-    event->proto_destination = message->destProto;
-    
+   
     if (!event) {
         free_message(message);
         return;
     }
+
+    event->proto_source = MICRO_BABEL_DISCOVERY_PROTO;
+    event->proto_destination = message->destProto;
+
     // post to the dispatcher (which fans out to interested queues)
     if (!event_dispatcher_post(event)) {
         free_event(event); // let your free_event own/cleanup payload
