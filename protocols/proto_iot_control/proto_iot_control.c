@@ -12,11 +12,6 @@
 
 #define TAG "IoT Control Protocol"
 
-/**************** MESSAGE CODES TO INTERACT WITH BABEL ON RASPBERRY *******************/
-#define MSG_INIT 17001
-#define MSG_CMD 17002
-#define MSG_DEVICE_UPDATE 17003
-
 static SemaphoreHandle_t iot_control_protocol_mutex;
 
 typedef struct device_node {
@@ -29,8 +24,9 @@ typedef struct device_node {
 
 static uint8_t id[UUID_SIZE];
 static QueueHandle_t iot_control_queue;
-
 static device_node_t* peers;
+
+static const device_t* device_info;
 
 static device_node_t* register_new_participant(event_t* neighbor_up_event) {
   device_node_t* node = (device_node_t*) malloc(sizeof(device_node_t));
@@ -226,6 +222,674 @@ static void iot_control_protocol_task() {
   }
 }
 
+action_t* initialize_action(uint16_t code, const char* name, action_t* previous) {
+  action_t* action = (action_t*) malloc(sizeof(action_t));
+  if(action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    return NULL;
+  }
+
+  action->action_name = strdup(name);
+  if(action->action_name == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action name");
+    free(action);
+    return NULL;
+  }
+
+  action->action_code = code;
+  action->next = NULL;
+  action->prev = previous;
+  action->parameters = NULL;
+
+  return action;
+}
+
+parameter_t* initialize_parameter(uint16_t code, const char* name, parameter_t* previous) {
+  parameter_t* parameter = (parameter_t*) malloc(sizeof(parameter_t));
+  if(parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    return NULL;
+  }
+
+  parameter->parameter_name = strdup(name);
+
+  parameter->parameter_value = code;
+  parameter->next = NULL;
+  parameter->prev = previous;
+
+  return parameter;
+}
+
+device_t* initialize_device_type_led_rgb(uint8_t type, const char* name) {
+  device_t* device = (device_t*) malloc(sizeof(device_t));
+  if(device == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for device");
+    return NULL;
+  }
+
+  device->device_type = type;
+  device->device_name = strdup(name);
+  device->actions = NULL;
+
+  action_t** action = &device->actions;
+  action_t* previous_action = NULL;
+
+  parameter_t * master_parameter = NULL;
+  parameter_t** parameter = &master_parameter;
+  parameter_t* previous_parameter = NULL;
+
+  *parameter = initialize_parameter(COLOR_RED, "Color Red", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free(device->device_name);
+    free(device);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  *parameter = initialize_parameter(COLOR_GREEN, "Color Green", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free(device->device_name);
+    free(master_parameter);
+    free(device);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  *parameter = initialize_parameter(COLOR_BLUE, "Color Blue", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free(device->device_name);
+    free(master_parameter->next);
+    free(master_parameter);
+    free(device);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  *parameter = initialize_parameter(COLOR_WHITE, "Color White", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free(device->device_name);
+    free(previous_parameter->next->next);
+    free(master_parameter->next);
+    free(master_parameter);
+    free(device);
+    return NULL;
+  }
+
+  (*parameter)->next = master_parameter;
+  master_parameter->prev = *parameter;
+
+  *action = initialize_action(DEVICE_ACTION_ON, "Turn On", previous_action);
+  if(*action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    free(device->device_name);
+    free(device);
+    return NULL;
+  } 
+  (*action)->parameters = master_parameter;
+
+  previous_action = *action;
+  action = &((*action)->next);
+  *action = initialize_action(DEVICE_ACTION_BLINK, "Blink", previous_action);
+  if(*action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    free(device->device_name);
+    free(previous_action);
+    free(device);
+    return NULL;
+  }
+  (*action)->parameters = master_parameter;
+
+  previous_action = *action;
+  action = &((*action)->next);
+  *action = initialize_action(DEVICE_ACTION_OFF, "Turn Off", previous_action);
+  if(*action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    free(device->device_name);
+    free(previous_action->prev);
+    free(previous_action);
+    free(device);
+    return NULL;
+  }
+  (*action)->parameters = master_parameter;
+
+  (*action)->next = device->actions;
+  device->actions->prev = *action;
+
+  return device;
+}
+
+void free_parameters(parameter_t* parameter) {
+  if(parameter->prev != NULL)
+    parameter->prev->next = NULL;
+
+  while (parameter != NULL) {
+    parameter_t* next = parameter->next;
+    free(parameter);
+    parameter = next;
+  }
+}
+
+parameter_t* generate_parameters_emoji() {
+  parameter_t * master_parameter = NULL;
+  parameter_t** parameter = &master_parameter;
+  parameter_t* previous_parameter = NULL;
+
+  (*parameter) = initialize_parameter(EMOJI_Smile, "Smile", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Laught, "Laught", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Sad, "Sad", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Mad, "Mad", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Angry, "Angry", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Cry, "Cry", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Greedy, "Greedy", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Cood, "Cood", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Shy, "Shy", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Awkward, "Awkward", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+    
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Heart, "Heart", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_SmallHeart, "SmallHeart", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_BrokenHeart, "BrokenHeart", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Waterdrop, "Waterdrop", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Flame, "Flame", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Creeper, "Creeper", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_MadCreeper, "MadCreeper", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Sword, "Sword", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_WoodenSword, "Wooden Sword", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_CrystalSword, "Crystal Sword", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_House, "House", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Tree, "Tree", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Flower, "Flower", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Umbrella, "Umbrella", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Rain, "Rain", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Monster, "Monster", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Crab, "Crab", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Duck, "Duck", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Rabbit, "Rabbit", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(EMOJI_Cat, "Cat", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  (*parameter)->next = master_parameter;
+  master_parameter->prev = *parameter;
+
+  return master_parameter;
+}
+
+parameter_t* generate_parameters_animation() {
+  parameter_t * master_parameter = NULL;
+  parameter_t** parameter = &master_parameter;
+  parameter_t* previous_parameter = NULL;
+
+  (*parameter) = initialize_parameter(ANIMATION_BigClock, "Big Clock", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(ANIMATION_SmallClock, "Small Clock", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(ANIMATION_Rainbow, "Rainbow", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(ANIMATION_Fire, "Fire", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(ANIMATION_WalkingChild, "Walking Child", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;  
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(ANIMATION_BrokenHeart, "Broken Heart", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free_parameters(master_parameter);
+    return NULL;
+  }
+
+  (*parameter)->next = master_parameter;
+  master_parameter->prev = *parameter;
+
+  return master_parameter;
+}
+
+device_t*  initialize_device_type_led_matrix(uint8_t type, const char* name) {
+  device_t* device = (device_t*) malloc(sizeof(device_t));
+  if(device == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for device");
+    return NULL;
+  }
+
+  device->device_type = type;
+  device->device_name = strdup(name);
+  device->actions = NULL;
+
+  action_t** action = &device->actions;
+  action_t* previous_action = NULL;
+
+  (*action) = initialize_action(DEVICE_ACTION_SHOW_EMOJI, "Show Emoji", previous_action);
+  if(*action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    free(device->device_name);
+    free(device);
+    return NULL;
+  }
+  (*action)->parameters = generate_parameters_emoji();
+  if((*action)->parameters == NULL)
+  {
+    LOG_ERROR(TAG, "Failed to allocate memory for action parameters");
+    free(device->device_name);
+    free(*action);
+    free(device);
+    return NULL;
+  }
+
+  previous_action = *action;
+  action = &((*action)->next);
+  (*action) = initialize_action(DEVICE_ACTION_SHOW_ANIMATION, "Show Animation", previous_action);
+  if(*action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    free(device->device_name);
+    free(previous_action);
+    free(device);
+    return NULL;
+  }
+  (*action)->parameters = generate_parameters_animation();
+  if((*action)->parameters == NULL)
+  {
+    LOG_ERROR(TAG, "Failed to allocate memory for action parameters");
+    free(device->device_name);
+    free(previous_action);
+    free(*action);
+    free(device);
+    return NULL;  
+  }
+
+  previous_action = *action;
+  action = &((*action)->next);
+  (*action) = initialize_action(DEVICE_ACTION_CLEAR, "Clear", previous_action);
+  if(*action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    free(device->device_name);
+    free(previous_action);
+    free(device->actions);
+    free(device);
+    return NULL;
+  }
+  (*action)->parameters = initialize_parameter(DEVICE_ACTION_CLEAR, "Clear", NULL);
+
+  if((*action)->parameters == NULL)
+  {
+    LOG_ERROR(TAG, "Failed to allocate memory for action parameters");
+    free(device->device_name);
+    free(previous_action);
+    free(*action);
+    free(device->actions);
+    free(device);
+    return NULL;  
+  }
+  (*action)->parameters->next = (*action)->parameters;
+  (*action)->parameters->prev = (*action)->parameters;  
+  
+  (*action)->next = device->actions;
+  device->actions->prev = *action;
+  
+  return device;
+}
+
+device_t*  initialize_device_type_lcd_display(uint8_t type, const char* name) {
+  device_t* device = (device_t*) malloc(sizeof(device_t));
+  if(device == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for device");
+    return NULL;
+  }
+
+  device->device_type = type;
+  device->device_name = strdup(name);
+  if(device->device_name == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for device name");
+    free(device);
+    return NULL;
+  }
+  device->actions = NULL;
+
+  parameter_t * master_parameter = NULL;
+  parameter_t** parameter = &master_parameter;
+  parameter_t* previous_parameter = NULL;
+
+  (*parameter) = initialize_parameter(TEXT_HELLO, "Hello", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free(device->device_name);
+    free(device);
+    return NULL;
+  }
+
+  previous_parameter = *parameter;
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(TEXT_YES, "Yes", previous_parameter);
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free(device->device_name);
+    free(master_parameter);
+    free(device);
+    return NULL;
+  }
+  
+  previous_parameter = *parameter;
+  parameter = &((*parameter)->next);
+  (*parameter) = initialize_parameter(TEXT_NO, "No", previous_parameter);   
+
+  if(*parameter == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for parameter");
+    free(device->device_name);
+    free(master_parameter->next);
+    free(master_parameter);
+    free(device);
+    return NULL;
+  }
+
+  (*parameter)->next = master_parameter;
+  master_parameter->prev = *parameter;
+
+  action_t** action = &device->actions;
+  action_t* previous_action = NULL;
+
+  (*action) = initialize_action(DEVICE_ACTION_SHOW_TEXT, "Show Text", previous_action);
+  if(*action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    free(device->device_name);
+    free(master_parameter->next);
+    free(master_parameter);
+    free(device);
+    return NULL;
+  }
+  (*action)->parameters = master_parameter;
+
+  previous_action = *action;
+  action = &((*action)->next);
+  (*action) = initialize_action(DEVICE_ACTION_CLEAR, "Clear", previous_action);
+  if(*action == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action");
+    free(device->device_name);
+    free(master_parameter->next);
+    free(master_parameter);
+    free(device);
+    return NULL;
+  }
+
+  (*action)->parameters = initialize_parameter(DEVICE_ACTION_CLEAR, "Clear", NULL);
+  (*action)->parameters->next = (*action)->parameters;
+  (*action)->parameters->prev = (*action)->parameters;
+
+  (*action)->next = device->actions;
+  device->actions->prev = *action;  
+
+  return device;
+}
+
 void iot_control_protocol_init() {
   get_local_identifier(id);
   iot_control_protocol_mutex = xSemaphoreCreateMutex();
@@ -240,7 +904,23 @@ void iot_control_protocol_init() {
   }
 
   peers = NULL;
-  
+  //We need to initialize the structures with all types of supported devices, associated actions, and associated parameters
+
+  device_t** devicetype =(device_t**) &device_info;
+  *devicetype = initialize_device_type_led_rgb(DEVICE_TYPE_LED_RGB, "Led RGB");
+  if(*devicetype != NULL) {
+    devicetype = &((*devicetype)->next);
+    *devicetype = initialize_device_type_led_matrix(DEVICE_TYPE_LED_MATRIX, "Led Matrix");
+    if(*devicetype != NULL) {
+      devicetype = &((*devicetype)->next);
+      *devicetype = initialize_device_type_lcd_display(DEVICE_TYPE_LCD_DISPLAY, "LCD Display");
+      if(*devicetype != NULL) {
+        devicetype = &((*devicetype)->next);
+        *devicetype = (device_t*) device_info;
+      }
+    }
+  }
+
   proto_manager_register_protocol(iot_control_queue, IOT_CONTROL_PROTO_ID);
   event_dispatcher_register(iot_control_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_UP);
   event_dispatcher_register(iot_control_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_DOWN);

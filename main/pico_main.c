@@ -134,9 +134,10 @@ static void show_device(iot_node_handle_t node_handle, iot_device_handle_t devic
 }
 
 typedef enum {
-    outside,
     node,
-    device
+    device,
+    action,
+    parameter
 } navigation_mode_t;
 
 static QueueHandle_t application_queue;
@@ -156,40 +157,13 @@ void application_task(void *pvParameters) {
             if(event->type == EVENT_TYPE_NOTIFICATION) {
 
                 if(event->subtype == EVENT_BUTTON_A_PRESSED) {
-                    //enter/exit from outside to node
-                    if(nav == outside) {
-                        nav = node;
-                        device_handle = initialize_device_iterator(node_handle);
-                        printf("Main Action, device handle is: %d\n", device_handle);
-                        show_device(node_handle, device_handle);
-                    } else if (nav == node) {
-                        nav = outside;
-                        scroll_node(node_handle);
-                    }
+                    //go up a level or execute
                 } else if(event->subtype == EVENT_BUTTON_B_PRESSED) {
-                    //move to previous device
-                    if(nav == outside) {
-                        node_handle = previous_node(node_handle);
-                        scroll_node(node_handle);                        
-                    } else if (nav == node) {
-                        device_handle = previous_device(node_handle, device_handle);
-                        show_device(node_handle, device_handle);
-                    }
-                    
+                    //Previous element in the list
                 } else if(event->subtype == EVENT_BUTTON_X_PRESSED) {
-                    //execute action
-                    if(nav == node)
-                        device_action(node_handle, device_handle);
+                    //Go down a level (or in node go to broadcast)
                 } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
-                    //move to next device
-                    if(nav == outside) {
-                        node_handle = next_node(node_handle);
-                        scroll_node(node_handle);
-                    } else if (nav == node) {
-                        device_handle = next_device(node_handle, device_handle);
-                        show_device(node_handle, device_handle); 
-                        
-                    }
+                    //Next element on the list
                 }
             }
             free_event(event);
@@ -205,7 +179,7 @@ void application_init() {
     event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_X_PRESSED);
     event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_Y_PRESSED); 
 
-    nav = outside;
+    nav = node;
 
     node_handle = initialize_node_iterator();
 
