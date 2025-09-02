@@ -20,8 +20,16 @@
 #define LORA_BW 125E3
 #define LORA_TX_POWER 17
 
+#ifdef M5STACK_CORE_BASIC
 #define CS_PIN 5
 #define IRQ_PIN 36
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+#define CS_PIN 5
+#define IRQ_PIN 36
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+#define CS_PIN 17
+#define IRQ_PIN 18
+#endif
 
 static const char *TAG = "sx127x";
 

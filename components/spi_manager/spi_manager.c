@@ -16,7 +16,6 @@ static const char *TAG = "SPI_MANAGER";
 #define MISO_PIN 19
 #define SCLK_PIN 18
 #define MOSI_PIN 23
-#define CONFIG_LCD_TOUCH_ENABLED 0
 #elif defined(CONFIG_IDF_TARGET_ESP32)
 #define MISO_PIN 21
 #define SCLK_PIN 18

@@ -9,6 +9,9 @@ menu "LCD / Touch Configuration"
         config LCD_CONTROLLER_ILI9341
             bool "ILI9341"
 
+        config LCD_CONTROLLER_ILI9342
+            bool "ILI9342"
+
         config LCD_CONTROLLER_ILI9488
             bool "ILI9488"
     endchoice
