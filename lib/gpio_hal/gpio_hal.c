@@ -9,6 +9,7 @@ void gpio_init_pin(int pin) {
     gpio_config(&io_conf);
 #else
     gpio_init(pin);
+    gpio_disable_pulls(pin); // this matches the ESP config but I'm not 100% sure it's necessary
 #endif
 }
 

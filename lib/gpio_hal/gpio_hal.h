@@ -6,9 +6,20 @@
 #ifdef BUILD_ESP32
 #include <driver/gpio.h>
 #include <rom/ets_sys.h>
+
+typedef enum {
+    GPIO_INPUT = GPIO_MODE_INPUT,
+    GPIO_OUTPUT = GPIO_MODE_OUTPUT,
+} gpio_hal_mode_t;
 #else
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
+
+typedef enum {
+    GPIO_INPUT = GPIO_IN,
+    GPIO_OUTPUT = GPIO_OUT,
+} gpio_hal_mode_t;
+
 #endif
 
 void gpio_init_pin(int pin);
