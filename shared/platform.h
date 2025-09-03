@@ -22,12 +22,14 @@
 #define LOG_INFO(tag, fmt, ...) ESP_LOGI(tag, fmt, ##__VA_ARGS__)
 #define LOG_ERROR(tag, fmt, ...) ESP_LOGE(tag, fmt, ##__VA_ARGS__)
 #define LOG_WARN(tag, fmt, ...) ESP_LOGW(tag, fmt, ##__VA_ARGS__)
+#define LOG_DEBUG(tag, fmt, ...) ESP_LOGD(tag, fmt, ##__VA_ARGS__)
 #endif
 
 #ifndef BUILD_ESP32
 #define LOG_INFO(tag, fmt, ...) printf("[%s] " fmt "\n", tag, ##__VA_ARGS__)
 #define LOG_ERROR(tag, fmt, ...) printf("[ERROR %s] " fmt "\n", tag, ##__VA_ARGS__)
 #define LOG_WARN(tag, fmt, ...) printf("[WARNING %s] " fmt "\n", tag, ##__VA_ARGS__)
+#define LOG_DEBUG(tag, fmt, ...) printf("[DEBUG %s] " fmt "\n", tag, ##__VA_ARGS__)
 #endif
 
 #endif // PLATFORM_H

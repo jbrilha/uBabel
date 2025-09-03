@@ -31,7 +31,9 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #include "esp_lcd_ili9488.h"
 #endif
 
+#if CONFIG_LCD_TOUCH_ENABLED
 #include "esp_lcd_touch_xpt2046.h"
+#endif
 
 #define LCD_HOST SPI2_HOST
 
@@ -41,7 +43,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_H_RES 240
 #define LCD_V_RES 320
 
-#define LCD_PIXEL_CLOCK_HZ (20 * 1000 * 1000)
+#define LCD_PIXEL_CLOCK_HZ (40 * 1000 * 1000)
 #define BITS_PER_PIXEL 16
 
 #elif CONFIG_LCD_CONTROLLER_ILI9342
@@ -67,38 +69,30 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_BK_LIGHT_OFF_LEVEL !LCD_BK_LIGHT_ON_LEVEL
 
 #ifdef M5STACK_CORE_BASIC
-#define LCD_CS 14
-#define LCD_RST 33
-#define LCD_DC 27
-// #define LCD_MOSI 23
-// #define LCD_CLK 18
-#define BK_LIGHT 32
-// #define LCD_MISO -1
+#define LCD_CS_PIN 14
+#define LCD_RST_PIN 33
+#define LCD_DC_PIN 27
+#define LCD_BL_PIN 32
+
 // no touch capabilities on the Core Basic :(
 #define CONFIG_LCD_TOUCH_ENABLED 0
 #elif defined(CONFIG_IDF_TARGET_ESP32)
-#define LCD_CS 4
-#define LCD_RST 13
-#define LCD_DC 5
-// #define LCD_MOSI 19
-// #define LCD_CLK 18
-#define BK_LIGHT 2
-// #define LCD_MISO 21
+#define LCD_CS_PIN 4
+#define LCD_RST_PIN 13
+#define LCD_DC_PIN 5
+#define LCD_BL_PIN 2
 
-#define TOUCH_CS 15
+#define TOUCH_CS_PIN 15
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#define LCD_CS 10
-#define LCD_RST 6
-#define LCD_DC 7
-// #define LCD_MOSI 11
-// #define LCD_CLK 12
-#define BK_LIGHT 5
-// #define LCD_MISO 13
+#define LCD_CS_PIN 10
+#define LCD_RST_PIN 6
+#define LCD_DC_PIN 7
+#define LCD_BL_PIN 5
 
-#define TOUCH_MOSI 39
-#define TOUCH_CLK 38
-#define TOUCH_MISO 40
-#define TOUCH_CS 16
+#define TOUCH_MOSI_PIN 39
+#define TOUCH_CLK_PIN 38
+#define TOUCH_MISO_PIN 40
+#define TOUCH_CS_PIN 16
 #endif
 
 // Bit number used to represent command and parameter
@@ -121,6 +115,12 @@ static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
 static bool display_initialized = false;
 
+#ifdef CONFIG_LCD_CONTROLLER_ILI9341
+static const bool mirror_x = true;
+#else
+static const bool mirror_x = false;
+#endif
+
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
                                     esp_lcd_panel_io_event_data_t *edata,
                                     void *user_ctx) {
@@ -129,8 +129,38 @@ static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
     return false;
 }
 
+static void lvgl_port_update_callback(lv_display_t *disp) {
+    esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
+    lv_display_rotation_t rotation = lv_display_get_rotation(disp);
+
+    switch (rotation) {
+    case LV_DISPLAY_ROTATION_0:
+        // Rotate LCD display
+        esp_lcd_panel_swap_xy(panel_handle, false);
+        esp_lcd_panel_mirror(panel_handle, mirror_x, false);
+        break;
+    case LV_DISPLAY_ROTATION_90:
+        // Rotate LCD display
+        esp_lcd_panel_swap_xy(panel_handle, true);
+        esp_lcd_panel_mirror(panel_handle, mirror_x, true);
+        break;
+    case LV_DISPLAY_ROTATION_180:
+        // Rotate LCD display
+        esp_lcd_panel_swap_xy(panel_handle, false);
+        esp_lcd_panel_mirror(panel_handle, !mirror_x, true);
+        break;
+    case LV_DISPLAY_ROTATION_270:
+        // Rotate LCD display
+        esp_lcd_panel_swap_xy(panel_handle, true);
+        esp_lcd_panel_mirror(panel_handle, !mirror_x, false);
+        break;
+    }
+}
+
 static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area,
                           uint8_t *px_map) {
+    lvgl_port_update_callback(disp);
+
     esp_lcd_panel_handle_t panel_handle = lv_display_get_user_data(disp);
     int offsetx1 = area->x1;
     int offsetx2 = area->x2;
@@ -216,8 +246,8 @@ static void lvgl_port_task(void *arg) {
 
 void init_display() {
     esp_lcd_panel_io_spi_config_t io_config = {
-        .dc_gpio_num = LCD_DC,
-        .cs_gpio_num = LCD_CS,
+        .dc_gpio_num = LCD_DC_PIN,
+        .cs_gpio_num = LCD_CS_PIN,
         .pclk_hz = LCD_PIXEL_CLOCK_HZ,
         .lcd_cmd_bits = LCD_CMD_BITS,
         .lcd_param_bits = LCD_PARAM_BITS,
@@ -230,7 +260,7 @@ void init_display() {
                                              &io_config, &io_handle));
 
     esp_lcd_panel_dev_config_t panel_config = {
-        .reset_gpio_num = LCD_RST,
+        .reset_gpio_num = LCD_RST_PIN,
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
         .bits_per_pixel = BITS_PER_PIXEL,
     };
@@ -287,9 +317,9 @@ static void lvgl_touch_cb(lv_indev_t *indev, lv_indev_data_t *data) {
 #ifdef CONFIG_LCD_CONTROLLER_ILI9488
 void init_touch_spi() {
     spi_bus_config_t touch_buscfg = {
-        .sclk_io_num = TOUCH_CLK,
-        .mosi_io_num = TOUCH_MOSI,
-        .miso_io_num = TOUCH_MISO,
+        .sclk_io_num = TOUCH_CLK_PIN,
+        .mosi_io_num = TOUCH_MOSI_PIN,
+        .miso_io_num = TOUCH_MISO_PIN,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = 4096,
@@ -304,7 +334,7 @@ void init_touch_spi() {
 void init_touch() {
     esp_lcd_panel_io_handle_t tp_io_handle = NULL;
     esp_lcd_panel_io_spi_config_t tp_io_config =
-        ESP_LCD_TOUCH_IO_SPI_XPT2046_CONFIG(TOUCH_CS);
+        ESP_LCD_TOUCH_IO_SPI_XPT2046_CONFIG(TOUCH_CS_PIN);
     // Attach the TOUCH to the SPI bus
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(
         (esp_lcd_spi_bus_handle_t)TOUCH_HOST, &tp_io_config, &tp_io_handle));
@@ -338,14 +368,14 @@ void init_touch() {
 void lcd_init_task(void *pvParameters) {
     ESP_LOGI(TAG, "Turn off LCD backlight");
     gpio_config_t bk_gpio_config = {.mode = GPIO_MODE_OUTPUT,
-                                    .pin_bit_mask = 1ULL << BK_LIGHT};
+                                    .pin_bit_mask = 1ULL << LCD_BL_PIN};
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
 
     ESP_LOGI(TAG, "Install panel IO");
     init_display();
 
     ESP_LOGI(TAG, "Turn on LCD backlight");
-    gpio_set_level(BK_LIGHT, LCD_BK_LIGHT_ON_LEVEL);
+    gpio_set_level(LCD_BL_PIN, LCD_BK_LIGHT_ON_LEVEL);
 
     ESP_LOGI(TAG, "Initialize LVGL library");
     init_lvgl();

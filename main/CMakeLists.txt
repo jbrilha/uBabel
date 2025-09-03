@@ -30,6 +30,8 @@ if(DEFINED BUILD_PICO)
         mem_check
         proto_simple_overlay
         proto_iot_control
+        gpio_hal
+        dht11
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)
