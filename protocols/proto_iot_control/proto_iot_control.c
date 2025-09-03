@@ -1150,7 +1150,7 @@ uint8_t get_device_type(iot_node_handle_t node, iot_device_handle_t device) {
     return current->devices[device];
 } 
 
-bool device_action(iot_node_handle_t node, iot_device_handle_t device, , device_t* d, action_t* a, parameter_t* p) {
+bool device_action(iot_node_handle_t node, iot_device_handle_t device, device_t* d, action_t* a, parameter_t* p) {
    LOG_INFO(TAG, "Going to send a request for activating a device");
 
   if(node == NULL || d == NULL || a == NULL)
