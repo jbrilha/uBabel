@@ -86,14 +86,14 @@ static void scroll_node(iot_node_handle_t device) {
     }
 }
 
-static void show_device(iot_node_handle_t node_handle, iot_device_handle_t device_handle) {
+static void show_device(iot_node_handle_t node_handle, iot_device_handle_t device_handle, device_t* device_info) {
     
     char* text = (char*) malloc(9);
 
     if(text != NULL) {
         memset(text,0, 9);
         LOG_INFO(TAG, "Going to print a device with device_handle %d", device_handle);
-        if(device_handle < 0) {
+        if(device_handle < 0 || device_info == NULL) {
             switch(device_handle) {
             case NO_DEVICE:
                 sprintf(text, "NO DEV");
@@ -104,22 +104,13 @@ static void show_device(iot_node_handle_t node_handle, iot_device_handle_t devic
                 break;      
             }        
         } else {
-            uint8_t device_type = get_device_type(node_handle, device_handle);
-            LOG_INFO(TAG, "Going to print a device with device type %d", device_type);
-            switch(device_type) {
-            case DEVICE_TYPE_LED_RGB:
-                sprintf(text, "LED");
-                break;
-            case DEVICE_TYPE_LED_MATRIX:
-                sprintf(text, "MATRIX");
-                break;
-            case DEVICE_TYPE_LCD_DISPLAY:
-                sprintf(text, "LCD");
-                break;
-            default:  
-                sprintf(text, "ERR TYPE");
-                break;      
-            }        
+            LOG_INFO(TAG, "Going to print a device with device type %d", device_info->device_type);
+            free(text);
+            text = strdup(device_info->device_name);
+            if(text == NULL) {
+                LOG_ERROR(TAG, "Failed to allocate memory for device name");
+                return;
+            }      
         }
         
         event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_PRINT, text, 8);
@@ -145,6 +136,80 @@ static iot_node_handle_t node_handle;
 static iot_device_handle_t device_handle;
 static navigation_mode_t nav;
 
+extern const device_t* device_info; //From IoTControl protocol  
+static device_t* current_device = NULL;
+static action_t* current_action = NULL; 
+static parameter_t* current_parameter = NULL;
+
+static device_t* find_correct_device(uint8_t device_type) {
+    device_t* current = (device_t*) device_info;
+    while(current != NULL) {
+        if(current->device_type == device_type) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
+
+static void show_error(const char* message) {
+    if(message != NULL) {
+        char* text = strdup(message);
+        if(text != NULL) {
+            event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_PRINT, text, strlen(text));
+            if(print_event == NULL || !event_dispatcher_post(print_event)) {
+                if(print_event != NULL) {
+                    free_event(print_event);
+                } else {
+                    free(text);
+                }
+            }
+        }
+    }
+}   
+
+static void show_action(action_t* action_info) {
+    char* text = NULL;
+    
+    if(action_info != NULL) {
+        text = strdup(action_info->action_name);        
+    } else {
+        text = strdup("No action selected");
+    }
+
+    if(text != NULL) {
+        event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_PRINT, text, strlen(text));
+        if(print_event == NULL || !event_dispatcher_post(print_event)) {
+            if(print_event != NULL) {
+                free_event(print_event);
+            } else {
+                free(text);
+            }
+        }
+    }
+}
+
+static void show_parameter(parameter_t* parameter) {
+    char* text = NULL;
+
+    if(parameter != NULL) {
+        text = strdup(parameter->parameter_name);
+    } else {
+        text = strdup("Action does not have parameters");
+    }
+
+    if(text != NULL) {
+        event_t* print_event = create_event(EVENT_TYPE_REQUEST, REQUEST_PRINT, text, strlen(text));
+        if(print_event == NULL || !event_dispatcher_post(print_event)) {
+            if(print_event != NULL) {
+                free_event(print_event);
+            } else {
+                free(text);
+            }
+        }
+    }
+}
+
 void application_task(void *pvParameters) {
     char output[256];
     event_t* event = NULL;
@@ -158,12 +223,144 @@ void application_task(void *pvParameters) {
 
                 if(event->subtype == EVENT_BUTTON_A_PRESSED) {
                     //go up a level or execute
+                    switch(nav) {
+                        case node:
+                            nav = device;
+                            device_handle = initialize_device_iterator(node_handle);
+                            uint16_t device_typology = get_device_type(node_handle, device_handle);
+                            current_device = find_correct_device(device_typology);
+                            printf("Main Action, device handle is: %d\n", device_handle);
+                            show_device(node_handle, device_handle, current_device);
+                            break;
+                        case device:
+                            if(current_device == NULL) {
+                                nav = device;
+                                uint16_t device_typology = get_device_type(node_handle, device_handle);
+                                current_device = find_correct_device(device_typology);
+                                show_error("No valid device");
+                            } else {
+                                nav = action;
+                                current_action = current_device->actions;
+                                show_action(current_action);
+                            }
+                            break;
+                        case action:
+                            if(current_device == NULL) {
+                                nav = device;
+                                uint16_t device_typology = get_device_type(node_handle, device_handle);
+                                current_device = find_correct_device(device_typology);
+                                show_error("No valid device");
+                            } else if(current_action == NULL) {
+                                show_error("No valid action");  
+                            } else {
+                                nav = parameter;
+                                current_parameter = current_action->parameters;
+                                show_parameter(current_parameter);
+                            }
+                            break;
+                        case parameter:
+                            //This is to effectively execute the action over the device using the appropriate parameters
+                            break;
+                        default:
+                            LOG_ERROR(TAG, "Unknown navigation mode");
+                            break;
+                    }
+
                 } else if(event->subtype == EVENT_BUTTON_B_PRESSED) {
                     //Previous element in the list
+                    switch(nav) {
+                        case node:
+                            node_handle = previous_node(node_handle);
+                            scroll_node(node_handle);    
+                            break;
+                        case device:
+                            device_handle = previous_device(device_handle);
+                            uint16_t device_typology = get_device_type(node_handle, device_handle);
+                            current_device = find_correct_device(device_typology);
+                            printf("Main Action, device handle is: %d\n", device_handle);
+                            show_device(node_handle, device_handle, current_device);
+                            break;
+                        case action:
+                            if(current_action 1= NULL) {
+                                current_action = current_action->previous;
+                                show_action(current_action);
+                            } else {
+                                nav = device;
+                                show_error("No action available");
+                            }
+                            break;
+                        case parameter:
+                            if(current_parameter != NULL) {
+                                current_parameter = current_parameter->previous;
+                                show_parameter(current_parameter);
+                            } else {
+                                show_error("No parameter available");
+                            }
+                            break;
+                        default:
+                            LOG_ERROR(TAG, "Unknown navigation mode");
+                            break;
+                    }
+
                 } else if(event->subtype == EVENT_BUTTON_X_PRESSED) {
                     //Go down a level (or in node go to broadcast)
+                    switch(nav) {
+                        case node:
+                            //nothing to be done
+                        case device:
+                            nav = node;
+                            if(node_handle == NULL)
+                                node_handle = initialize_node_iterator();
+                            scroll_node(node_handle);
+                            break;
+                        case action:
+                            nav = device;
+                            show_device(node_handle, device_handle, current_device);
+                            break;
+                        case parameter:
+                            nav = action;
+                            show_action(current_action);
+                            break;
+                        default:
+                            LOG_ERROR(TAG, "Unknown navigation mode");
+                            break;
+                    }
+
                 } else if(event->subtype == EVENT_BUTTON_Y_PRESSED) {
                     //Next element on the list
+                    switch(nav) {
+                        case node:
+                            node_handle = previous_node(node_handle);
+                            scroll_node(node_handle);    
+                            break;
+                        case device:
+                            device_handle = next_device(device_handle);
+                            uint16_t device_typology = get_device_type(node_handle, device_handle);
+                            current_device = find_correct_device(device_typology);
+                            printf("Main Action, device handle is: %d\n", device_handle);
+                            show_device(node_handle, device_handle, current_device);
+                            break;
+                        case action:
+                            if(current_action ! = NULL) {
+                                current_action = current_action->next;
+                                show_action(current_action);
+                            } else {
+                                nav = device;
+                                show_error("No action available");
+                            }
+                            break;
+                        case parameter:
+                            if(current_parameter != NULL) {
+                                current_parameter = current_parameter->previous;
+                                show_parameter(current_parameter);
+                            } else {
+                                show_error("No parameter available");
+                            }
+                            break;
+                        default:
+                            LOG_ERROR(TAG, "Unknown navigation mode");
+                            break;
+                    }
                 }
             }
             free_event(event);
