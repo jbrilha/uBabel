@@ -26,7 +26,11 @@ static uint8_t id[UUID_SIZE];
 static QueueHandle_t iot_control_queue;
 static device_node_t* peers;
 
-static const device_t* device_info;
+static device_t* device_info;
+
+device_t* get_device_info_data() {
+  return device_info;
+}
 
 static device_node_t* register_new_participant(event_t* neighbor_up_event) {
   device_node_t* node = (device_node_t*) malloc(sizeof(device_node_t));
@@ -1146,10 +1150,10 @@ uint8_t get_device_type(iot_node_handle_t node, iot_device_handle_t device) {
     return current->devices[device];
 } 
 
-bool device_action(iot_node_handle_t node, iot_device_handle_t device) {
+bool device_action(iot_node_handle_t node, iot_device_handle_t device, , device_t* d, action_t* a, parameter_t* p) {
    LOG_INFO(TAG, "Going to send a request for activating a device");
 
-  if(node == NULL)
+  if(node == NULL || d == NULL || a == NULL)
     return false;
 
   xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
@@ -1163,21 +1167,22 @@ bool device_action(iot_node_handle_t node, iot_device_handle_t device) {
 
   if(current != NULL && device < current->n_devices) {
 
-    uint16_t* payload = malloc(sizeof(uint16_t) * 2);
+    uint16_t* payload = malloc(sizeof(uint16_t) * 3);
                     
     if(payload != NULL) {
-      payload[0] = htons(current->devices[device]);
-      payload[1] = htons(DEVICE_ACTION_ON);
+      payload[0] = htons(d->device_type);
+      payload[1] = htons(a->action_code);
+      payload[2] = p != NULL ? htons(p->parameter_value) : htons(0);
                         
-      message_t* activation_operation = create_message(MSG_CMD, id, IOT_CONTROL_PROTO_ID, current->id, IOT_CONTROL_PROTO_ID, (uint8_t*) payload, sizeof(uint16_t) * 2);
+      message_t* device_operation = create_message(MSG_CMD, id, IOT_CONTROL_PROTO_ID, current->id, IOT_CONTROL_PROTO_ID, (uint8_t*) payload, sizeof(uint16_t) * 3);
 
-      if(activation_operation != NULL) {
-        event_t * ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, activation_operation, sizeof(message_t));
+      if(device_operation != NULL) {
+        event_t * ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, device_operation, sizeof(message_t));
         if(ev != NULL && !send_message(ev, current->id)) {
           if(ev != NULL) {
             free_event(ev);
           } else {
-            free_message(activation_operation);
+            free_message(device_operation);
           }
           xSemaphoreGive(iot_control_protocol_mutex);
           LOG_INFO(TAG, "Attempted to prepare the request but failed to sent.");

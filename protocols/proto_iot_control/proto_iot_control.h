@@ -98,6 +98,8 @@ typedef struct device_node_spec {
 typedef void* iot_node_handle_t;
 typedef signed char iot_device_handle_t;
 
+
+
 #define INVALID_NODE -2
 #define NO_DEVICE -1
 
@@ -106,6 +108,8 @@ extern "C" {
 #endif  
 
 void iot_control_protocol_init();
+
+device_t* get_device_info_data();
 
 iot_node_handle_t initialize_node_iterator();
 iot_node_handle_t next_node(iot_node_handle_t node);
@@ -118,7 +122,7 @@ iot_device_handle_t previous_device(iot_node_handle_t node, iot_device_handle_t 
 
 uint8_t get_device_type(iot_node_handle_t node, iot_device_handle_t device);
 
-bool device_action(iot_node_handle_t node, iot_device_handle_t device);
+bool device_action(iot_node_handle_t node, iot_device_handle_t device, device_t* d, action_t* a, parameter_t* p);
 
 #ifdef __cplusplus
 }

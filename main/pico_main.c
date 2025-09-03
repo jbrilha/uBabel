@@ -35,6 +35,8 @@
 #include "pico_scroll_wrapper.h"
 #include "pico_unicorn_wrapper.h"
 
+#include "proto_iot_control.h"
+
 static const char *TAG = "PICO_MAIN";
 
 #define WIFI_SSID "ESP32_AP"
@@ -136,7 +138,7 @@ static iot_node_handle_t node_handle;
 static iot_device_handle_t device_handle;
 static navigation_mode_t nav;
 
-extern const device_t* device_info; //From IoTControl protocol  
+static const device_t* device_info; //From IoTControl protocol  
 static device_t* current_device = NULL;
 static action_t* current_action = NULL; 
 static parameter_t* current_parameter = NULL;
@@ -260,6 +262,7 @@ void application_task(void *pvParameters) {
                             break;
                         case parameter:
                             //This is to effectively execute the action over the device using the appropriate parameters
+                            device_action(node_handle, device_handle, current_device, current_action, current_parameter);
                             break;
                         default:
                             LOG_ERROR(TAG, "Unknown navigation mode");
@@ -274,15 +277,15 @@ void application_task(void *pvParameters) {
                             scroll_node(node_handle);    
                             break;
                         case device:
-                            device_handle = previous_device(device_handle);
+                            device_handle = previous_device(node_handle, device_handle);
                             uint16_t device_typology = get_device_type(node_handle, device_handle);
                             current_device = find_correct_device(device_typology);
                             printf("Main Action, device handle is: %d\n", device_handle);
                             show_device(node_handle, device_handle, current_device);
                             break;
                         case action:
-                            if(current_action 1= NULL) {
-                                current_action = current_action->previous;
+                            if(current_action != NULL) {
+                                current_action = current_action->prev;
                                 show_action(current_action);
                             } else {
                                 nav = device;
@@ -291,7 +294,7 @@ void application_task(void *pvParameters) {
                             break;
                         case parameter:
                             if(current_parameter != NULL) {
-                                current_parameter = current_parameter->previous;
+                                current_parameter = current_parameter->prev;
                                 show_parameter(current_parameter);
                             } else {
                                 show_error("No parameter available");
@@ -334,14 +337,14 @@ void application_task(void *pvParameters) {
                             scroll_node(node_handle);    
                             break;
                         case device:
-                            device_handle = next_device(device_handle);
+                            device_handle = next_device(node_handle, device_handle);
                             uint16_t device_typology = get_device_type(node_handle, device_handle);
                             current_device = find_correct_device(device_typology);
                             printf("Main Action, device handle is: %d\n", device_handle);
                             show_device(node_handle, device_handle, current_device);
                             break;
                         case action:
-                            if(current_action ! = NULL) {
+                            if(current_action != NULL) {
                                 current_action = current_action->next;
                                 show_action(current_action);
                             } else {
@@ -351,7 +354,7 @@ void application_task(void *pvParameters) {
                             break;
                         case parameter:
                             if(current_parameter != NULL) {
-                                current_parameter = current_parameter->previous;
+                                current_parameter = current_parameter->prev;
                                 show_parameter(current_parameter);
                             } else {
                                 show_error("No parameter available");
@@ -377,6 +380,7 @@ void application_init() {
     event_dispatcher_register(application_queue, EVENT_TYPE_NOTIFICATION, EVENT_BUTTON_Y_PRESSED); 
 
     nav = node;
+    device_info = get_device_info_data();
 
     node_handle = initialize_node_iterator();
 
