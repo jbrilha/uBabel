@@ -361,7 +361,18 @@ device_t* initialize_device_type_led_rgb(uint8_t type, const char* name) {
     free(device);
     return NULL;
   }
-  (*action)->parameters = master_parameter;
+  (*action)->parameters = initialize_parameter(DEVICE_ACTION_OFF, "Turn Off", NULL);
+  if((*action)->parameters == NULL) {
+    LOG_ERROR(TAG, "Failed to allocate memory for action parameters");
+    free(device->device_name);
+    free(previous_action->prev);
+    free(previous_action);
+    free(device);
+    return NULL;
+  }
+
+  (*action)->parameters->next = (action)->parameters;
+  (*action)->parameters->prev = (action)->parameters;
 
   (*action)->next = device->actions;
   device->actions->prev = *action;
