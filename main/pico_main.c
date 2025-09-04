@@ -230,10 +230,12 @@ void application_task(void *pvParameters) {
                             nav = device;
                             device_handle = initialize_device_iterator(node_handle);
                             if(device_handle == INVALID_NODE) {
+                                printf("There is something wrong with this node reference (might have failed): %d\n", device_handle);
                                 show_error("Invalid node");
                                 nav = node;
                                 node_handle = NULL;
                             } else if(device_handle == NO_DEVICE ) {
+                                printf("MThere is no valid device in this node: %d\n", device_handle);
                                 show_error("No valid device");
                                 nav = node;
                                 node_handle = NULL;
@@ -242,12 +244,7 @@ void application_task(void *pvParameters) {
                                 current_device = find_correct_device(device_typology);
                                 printf("Main Action, device handle is: %d\n", device_handle);
                                 show_device(node_handle, device_handle, current_device);
-                                break; 
                             }
-                            uint16_t device_typology = get_device_type(node_handle, device_handle);
-                            current_device = find_correct_device(device_typology);
-                            printf("Main Action, device handle is: %d\n", device_handle);
-                            show_device(node_handle, device_handle, current_device);
                             break;
                         case device:
                             if(current_device == NULL) {
