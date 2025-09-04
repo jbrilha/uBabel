@@ -371,8 +371,8 @@ device_t* initialize_device_type_led_rgb(uint8_t type, const char* name) {
     return NULL;
   }
 
-  (*action)->parameters->next = (action)->parameters;
-  (*action)->parameters->prev = (action)->parameters;
+  (*action)->parameters->next = (*action)->parameters;
+  (*action)->parameters->prev = (*action)->parameters;
 
   (*action)->next = device->actions;
   device->actions->prev = *action;
