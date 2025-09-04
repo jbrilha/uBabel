@@ -229,6 +229,21 @@ void application_task(void *pvParameters) {
                         case node:
                             nav = device;
                             device_handle = initialize_device_iterator(node_handle);
+                            if(device_handle == INVALID_NODE) {
+                                show_error("Invalid node");
+                                nav = node;
+                                node_handle = NULL;
+                            } else if(device_handle == NO_DEVICE ) {
+                                show_error("No valid device");
+                                nav = node;
+                                node_handle = NULL;
+                            } else {
+                                uint16_t device_typology = get_device_type(node_handle, device_handle);
+                                current_device = find_correct_device(device_typology);
+                                printf("Main Action, device handle is: %d\n", device_handle);
+                                show_device(node_handle, device_handle, current_device);
+                                break; 
+                            }
                             uint16_t device_typology = get_device_type(node_handle, device_handle);
                             current_device = find_correct_device(device_typology);
                             printf("Main Action, device handle is: %d\n", device_handle);

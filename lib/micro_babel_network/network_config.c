@@ -3,10 +3,16 @@
 #include <string.h>
 
 int load_network_config(network_config_t* config) {
-    config->wifi_list_size = 1;
+    config->wifi_list_size = 3;
 
     strncpy(config->wifi_list[0].ssid, "TaRDIS-LAB", MAX_SSID_LEN);
     strncpy(config->wifi_list[0].pass, "TaRDISTaRDIS", MAX_PASS_LEN);
+
+    strncpy(config->wifi_list[1].ssid, "Ignis", MAX_SSID_LEN);
+    strncpy(config->wifi_list[1].pass, "fixefixe", MAX_PASS_LEN);
+
+    strncpy(config->wifi_list[2].ssid, "OpenFCT", MAX_SSID_LEN);
+    config->wifi_list[2].pass[0] = '\0'; // Open network
 
     return config->wifi_list_size;
 }
