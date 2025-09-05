@@ -31,6 +31,7 @@ if(DEFINED BUILD_PICO)
         proto_simple_overlay
         proto_iot_control
         gpio_hal
+        adc_hal
         dht11
     )
 
