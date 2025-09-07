@@ -88,6 +88,8 @@ static void update_node_devices(message_t* update_message) {
 
   if(update_message->payload != NULL && update_message->payload_size >= UUID_SIZE + sizeof(uint16_t)) {
 
+    LOG_INFO(TAG, "Processing the device update message for device %s", uuid_to_string(update_message->payload));
+
     uint8_t* message_ptr = (uint8_t*) update_message->payload;
 
     device_node_t* node = find_participant(message_ptr);
