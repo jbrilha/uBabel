@@ -32,8 +32,8 @@ if(DEFINED BUILD_PICO)
         proto_iot_control
         #gpio_hal
         #adc_hal
-        dht11
-        loudness_sensor
+        #dht11
+        #loudness_sensor
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)
