@@ -1,5 +1,4 @@
 #pragma once
-
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -13,6 +12,9 @@
 #define MSG_INIT 17001
 #define MSG_CMD 17002
 #define MSG_DEVICE_UPDATE 17003
+
+#define UNICAST_OP 0
+#define BROADCAST_OP 1
 
 /**************** COMMAND CODES TO INTERACT WITH BABEL ON RASPBERRY *******************/
 #define DEVICE_ACTION_ON 1

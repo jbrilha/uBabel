@@ -5,6 +5,7 @@
 #include "comm_manager.h"
 #include "common_events.h"
 
+
 #define IOT_CONTROL_TASK_PRIORITY (tskIDLE_PRIORITY + 1UL)
 #define IOT_CONTROL_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
@@ -938,6 +939,21 @@ void iot_control_protocol_init() {
     }
   }
 
+  //Create the meta node that represents all nodes
+  device_node_t* node = (device_node_t*) malloc(sizeof(device_node_t));
+
+  if(node != NULL) {
+    memset(node->id, 0, UUID_SIZE);
+    node->access_point = NULL;
+    node->n_devices = 3;
+    node->devices = (malloc(sizeof(uint16_t) * 3));
+    node->devices[0] = DEVICE_TYPE_LED_RGB;
+    node->devices[1] = DEVICE_TYPE_LED_MATRIX;
+    node->devices[2] = DEVICE_TYPE_LCD_DISPLAY; 
+    node->next = peers;
+    peers = node;
+  }
+
   proto_manager_register_protocol(iot_control_queue, IOT_CONTROL_PROTO_ID);
   event_dispatcher_register(iot_control_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_UP);
   event_dispatcher_register(iot_control_queue, EVENT_TYPE_NOTIFICATION, NOTIFICATION_NEIGHBOR_DOWN);
@@ -1012,6 +1028,11 @@ iot_node_handle_t previous_node(iot_node_handle_t node) {
 bool print_node_identifier(iot_node_handle_t node, char* str) {
   if(node == NULL)
     sprintf(str, "NO DEVICE SELECTED");
+
+  if(memcmp(((device_node_t*) node)->id, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", UUID_SIZE) == 0) {
+    sprintf(str, "ALL NODES");
+    return true;
+  }
 
   xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
 
@@ -1180,18 +1201,47 @@ bool device_action(iot_node_handle_t node, iot_device_handle_t device, device_t*
 
   if(current != NULL && device < current->n_devices) {
 
-    uint16_t* payload = malloc(sizeof(uint16_t) * 3);
-                    
+    if(current->n_devices == 0) {
+      xSemaphoreGive(iot_control_protocol_mutex);
+      LOG_INFO(TAG, "The selected node has no devices");
+      return false;
+    }
+
+    uint16_t* payload = malloc(sizeof(uint16_t) * 4); 
+         
     if(payload != NULL) {
       payload[0] = htons(d->device_type);
       payload[1] = htons(a->action_code);
       payload[2] = p != NULL ? htons(p->parameter_value) : htons(0);
-                        
-      message_t* device_operation = create_message(MSG_CMD, id, IOT_CONTROL_PROTO_ID, current->id, IOT_CONTROL_PROTO_ID, (uint8_t*) payload, sizeof(uint16_t) * 3);
+       
+      device_node_t* proxy = NULL;
+
+      if(memcmp(current->id, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", UUID_SIZE) == 0) {
+         LOG_INFO(TAG, "Sending multicast request");
+        payload[3] = htons(BROADCAST_OP); //Broadcast
+        proxy = peers;
+        while(proxy != NULL && (memcmp(proxy->id, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", UUID_SIZE) == 0 || proxy->access_point != NULL )) {
+          proxy = proxy->next;
+        }
+        
+        if(proxy == NULL) {
+          free(payload);
+          xSemaphoreGive(iot_control_protocol_mutex);
+          LOG_INFO(TAG, "No proxy available to send the broadcast request");
+          return false;
+        }
+      } else {
+        LOG_INFO(TAG, "Sending unicast request");
+        //This is a unicast... we need to check if the node is still present
+        payload[3] = htons(UNICAST_OP); //Unicast
+        proxy = current;
+      }
+
+      message_t* device_operation = create_message(MSG_CMD, id, IOT_CONTROL_PROTO_ID, current->id, IOT_CONTROL_PROTO_ID, (uint8_t*) payload, sizeof(uint16_t) * 4);
 
       if(device_operation != NULL) {
         event_t * ev = create_event(EVENT_TYPE_MESSAGE, EVENT_MESSAGE_SEND, device_operation, sizeof(message_t));
-        if(ev != NULL && !send_message(ev, current->id)) {
+        if(ev != NULL && !send_message(ev, proxy->id)) {
           if(ev != NULL) {
             free_event(ev);
           } else {

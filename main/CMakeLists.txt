@@ -30,8 +30,8 @@ if(DEFINED BUILD_PICO)
         mem_check
         proto_simple_overlay
         proto_iot_control
-        gpio_hal
-        adc_hal
+        #gpio_hal
+        #adc_hal
         dht11
     )
 
