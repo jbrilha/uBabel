@@ -33,6 +33,7 @@ if(DEFINED BUILD_PICO)
         #gpio_hal
         #adc_hal
         dht11
+        loudness_sensor
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)
