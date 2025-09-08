@@ -48,6 +48,7 @@ typedef struct {
     uint8_t sourceId[UUID_SIZE];
     uint16_t sourceProto;
     uint8_t destId[UUID_SIZE];
+    uint8_t* effective_destination;
     uint16_t destProto;
     uint8_t* payload;
     uint16_t payload_size;

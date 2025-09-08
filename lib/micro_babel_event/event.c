@@ -101,6 +101,7 @@ message_t* create_message(uint16_t message_type, uint8_t srcId[UUID_SIZE], uint1
         memcpy(msg->destId, destId, UUID_SIZE);
         msg->sourceProto = srcProto;
         msg->destProto = destProto;
+        msg->effective_destination = NULL;
         msg->payload = payload;
         msg->payload_size = payload_size;
     }
@@ -117,6 +118,7 @@ message_t* create_empty_message(uint16_t message_type, uint8_t srcId[UUID_SIZE],
         memcpy(msg->destId, destId, UUID_SIZE);
         msg->sourceProto = srcProto;
         msg->destProto = destProto;
+        msg->effective_destination = NULL;
         msg->payload = NULL;
         msg->payload_size = 0;
     }
@@ -127,6 +129,8 @@ message_t* create_empty_message(uint16_t message_type, uint8_t srcId[UUID_SIZE],
 void free_message(message_t* msg) {
     if(msg->payload != NULL)
         free(msg->payload);
+    if(msg->effective_destination != NULL)
+        free(msg->effective_destination);
     free(msg);
 }
 

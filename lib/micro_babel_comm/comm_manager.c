@@ -457,9 +457,24 @@ static int serialize_message_to_frame(const message_t* msg, uint8_t** out_buf, u
 }
 
 static void dispatchMessageToSocket(message_t* msg) {
-  node_register_t *target = find_participant_by_id(msg->destId);
+  LOG_INFO(TAG, "Dispatching message to socket for destination %s", uuid_to_string(msg->destId));
+  if(msg == NULL) {
+    LOG_INFO(TAG, "Message to be dispatched is NULL");
+    return;
+  }
+  if(msg->destId == NULL) {
+    LOG_INFO(TAG, "Message to be dispatched has no destination ID");
+    return;
+  } 
+
+  node_register_t *target = msg->effective_destination != NULL ? find_participant_by_id(msg->effective_destination) : find_participant_by_id(msg->destId);
 
   if(target != NULL) {
+    if(target->status != CONNECTED) {
+      LOG_INFO(TAG, "Target participant is not connected. Current status is %s", print_status(target->status));
+      return;
+    }
+
      uint8_t* buffer;
      uint16_t buffer_len;
 
@@ -476,6 +491,8 @@ static void dispatchMessageToSocket(message_t* msg) {
     
       free(buffer);
     }
+  } else {
+    LOG_INFO(TAG, "No participant with the given destination ID was found in the address book");
   }
 }
 
@@ -1408,7 +1425,23 @@ bool send_message(event_t *msg, const uint8_t *destination_id)
 {
   xSemaphoreTake(comm_mutex, portMAX_DELAY);
   LOG_INFO(TAG, "Request to send message to %s", uuid_to_string((uint8_t *)destination_id));
+
+  //The next conditional block checks if the destination ID of the message is the same as the given destination ID.
+  //If they are different, it means that the message is being sent to another node as an intermediary, so we need to set the effective_destination field
+  //to the given destination ID. This way, the comm module knows to which node to send the message direcylty.
+  if(memcmp(destination_id, ((message_t *)msg->payload)->destId, UUID_SIZE) != 0) {
+    LOG_INFO(TAG, "Message destination ID does not match the given destination ID.");
+    ((message_t *)msg->payload)->effective_destination = (uint8_t *) malloc(UUID_SIZE);
+    if(((message_t *)msg->payload)->effective_destination == NULL) {
+      LOG_INFO(TAG, "Could not allocate memory for effective destination ID.");
+      xSemaphoreGive(comm_mutex);
+      return false;
+    }
+    memcpy(((message_t *)msg->payload)->effective_destination, destination_id, UUID_SIZE);
+  }
+
   if(xQueueSend(proto_discovery_queue, &msg, portMAX_DELAY) != pdPASS) {
+    LOG_INFO(TAG, "Could not send message to the communication manager.");
     free_event(msg);
   } 
   xSemaphoreGive(comm_mutex);
