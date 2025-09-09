@@ -4,6 +4,7 @@
 #include "proto_manager.h"
 #include "comm_manager.h"
 #include "common_events.h"
+#include <string.h>
 
 
 #define IOT_CONTROL_TASK_PRIORITY (tskIDLE_PRIORITY + 1UL)
@@ -93,8 +94,8 @@ static void update_node_devices(message_t* update_message) {
 
     uint8_t* message_ptr = (uint8_t*) update_message->payload;
 
-    device_node_t* node = find_participant(message_ptr);
-    if(node == NULL && find_participant(update_message->sourceId) != NULL) {
+    device_node_t* node = find_participant((int8_t*)message_ptr);
+    if(node == NULL && find_participant((int8_t*)update_message->sourceId) != NULL) {
       LOG_INFO(TAG, "Creating an indirect node with id: %s", uuid_to_string(message_ptr));
       node = register_new_indirect_participant(message_ptr, update_message->sourceId);
     } else {
@@ -186,6 +187,8 @@ static void send_init_request(device_node_t* d) {
 }
 
 static void iot_control_protocol_task() {
+  iot_control_protocol_mutex = xSemaphoreCreateMutex();
+
   event_t *event;
 
   while (true)
@@ -910,7 +913,6 @@ device_t*  initialize_device_type_lcd_display(uint8_t type, const char* name) {
 
 void iot_control_protocol_init() {
   get_local_identifier(id);
-  iot_control_protocol_mutex = xSemaphoreCreateMutex();
 
   LOG_INFO(TAG, "Initializing iot control protocol with id %s", uuid_to_string(id));
   

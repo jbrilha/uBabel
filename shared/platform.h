@@ -1,6 +1,8 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
+#include <stdio.h>
+
 #ifdef BUILD_PICO
 #include "pico/stdlib.h"
 

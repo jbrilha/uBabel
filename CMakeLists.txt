@@ -37,10 +37,9 @@ else()
         if(DEFINED M5STACK_RECEIVER)
             add_compile_definitions(M5STACK_RECEIVER=1)
         else()
+            add_compile_definitions(M5STACK_RECEIVER=0)
             add_compile_definitions(M5STACK_SENDER=1)
         endif()
-
-        set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/m5stack")
     endif()
 
     include($ENV{IDF_PATH}/tools/cmake/project.cmake)

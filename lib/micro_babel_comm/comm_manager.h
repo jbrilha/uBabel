@@ -1,10 +1,9 @@
 #pragma once
 
 #include <stdint.h>
-#include "FreeRTOS.h"
-#include "queue.h"
-#include "lwip/sockets.h"
+#include "platform.h"
 #include "event.h"
+#include "lwip/sockets.h"
 
 #ifndef MICRO_BABEL_EVENT_TYPES_H
 #define MICRO_BABEL_EVENT_TYPES_H
