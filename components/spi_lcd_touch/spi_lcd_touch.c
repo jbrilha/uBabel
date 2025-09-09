@@ -115,7 +115,7 @@ static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
 static bool display_initialized = false;
 
-#ifdef CONFIG_LCD_CONTROLLER_ILI9341
+#if CONFIG_LCD_CONTROLLER_ILI9341
 static const bool mirror_x = true;
 #else
 static const bool mirror_x = false;
