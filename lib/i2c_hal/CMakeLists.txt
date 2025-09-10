@@ -3,6 +3,6 @@ if(DEFINED BUILD_PICO)
 else()
 idf_component_register(SRCS "i2c_hal.c"
                         INCLUDE_DIRS "." "../../shared"
-                        PRIV_REQUIRES driver
+                        REQUIRES esp_driver_i2c
 )
 endif()
