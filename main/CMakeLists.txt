@@ -36,6 +36,7 @@ if(DEFINED BUILD_PICO)
         dht11
         loudness_sensor
         tca9548
+        paj7620
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)
