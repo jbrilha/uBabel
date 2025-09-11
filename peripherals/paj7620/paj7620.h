@@ -16,7 +16,7 @@ typedef enum paj7620_gesture_type {
    PAJ7620_LEFT,
    PAJ7620_RIGHT,
    PAJ7620_PUSH,
-   PAJ7620_POLL,
+   PAJ7620_PULL,
    PAJ7620_CLOCKWISE,
    PAJ7620_ANTI_CLOCKWISE,
    PAJ7620_WAVE
@@ -32,5 +32,7 @@ typedef enum paj7620_report_mode {
 bool PAJ7620_init(void);
 
 bool PAJ7620_get_gesture(paj7620_gesture_t *gesture);
+
+void run_PAJ7620_task(void);
 
 #endif // !PAJ7620_H

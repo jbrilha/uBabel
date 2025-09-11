@@ -3,6 +3,8 @@
 #include "platform.h"
 #include <stdint.h>
 
+static const char *TAG = "PAJ7620";
+
 // clang-format off
  static const uint8_t init_register_arr[][2] = {
         // BANK 0
@@ -59,7 +61,8 @@ static bool set_report_mode(uint8_t mode) {
 }
 
 bool PAJ7620_init(void) {
-    if (i2c_create_device(&device, PAJ7620_ADDR)) {
+    if (!i2c_create_device(&device, PAJ7620_ADDR)) {
+        printf("a\n");
         return false;
     }
 
@@ -72,13 +75,14 @@ bool PAJ7620_init(void) {
     read_reg(0x00, &reg_00);
 
     if ((reg_01 != 0x76) || (reg_00 != 0x20)) {
+        printf("b\n");
         return false;
     }
 
     for (uint8_t i = 0; i < INIT_REG_ARRAY_SIZE; i++)
         write_reg(init_register_arr[i][0], init_register_arr[i][1]);
 
-    return set_report_mode(NEAR_240FPS);
+    return set_report_mode(FAR_240FPS);
 }
 
 bool PAJ7620_get_gesture(paj7620_gesture_t *gesture) {
@@ -101,4 +105,62 @@ bool PAJ7620_get_gesture(paj7620_gesture_t *gesture) {
     }
 
     return false;
+}
+
+void PAJ7620_task(void *params) {
+    if (PAJ7620_init()) {
+        while (true) {
+            paj7620_gesture_t gesture;
+            if(PAJ7620_get_gesture(&gesture)) {
+                switch (gesture) {
+                case PAJ7620_UP:
+                    printf("—————— UP ——————\n");
+                    break;
+                case PAJ7620_DOWN:
+                    printf("————— DOWN —————\n");
+                    break;
+                case PAJ7620_LEFT:
+                    printf("————— LEFT —————\n");
+                    break;
+                case PAJ7620_RIGHT:
+                    printf("————— RIGHT —————\n");
+                    break;
+                case PAJ7620_PUSH:
+                    printf("—————— PUSH ——————\n");
+                    break;
+                case PAJ7620_PULL:
+                    printf("————— PULL —————\n");
+                    break;
+                case PAJ7620_CLOCKWISE:
+                    printf("————— CLOCK —————\n");
+                    break;
+                case PAJ7620_ANTI_CLOCKWISE:
+                    printf("————— ANTI —————\n");
+                    break;
+                case PAJ7620_WAVE:
+                    printf("————— WAVE —————\n");
+                    break;
+                    break;
+                }
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+
+    } else {
+        LOG_ERROR(TAG, "Failed to init PAJ7620 gesture detector");
+    }
+
+    vTaskDelete(NULL);
+}
+
+void run_PAJ7620_task(void) {
+
+    xTaskCreate(PAJ7620_task,   // Task function
+                "PAJ7620_task", // Task name
+                4096,           // Stack size in words
+                NULL,           // Task parameters
+                5,              // Priority
+                NULL            // Task handle
+    );
 }
