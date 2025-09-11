@@ -36,6 +36,7 @@ if(DEFINED BUILD_PICO)
         dht11
         loudness_sensor
         tca9548
+        mma7660
         paj7620
     )
 
