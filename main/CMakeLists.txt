@@ -38,6 +38,7 @@ if(DEFINED BUILD_PICO)
         tca9548
         mma7660
         paj7620
+        lcd16x2
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)
