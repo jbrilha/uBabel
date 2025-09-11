@@ -23,11 +23,13 @@ if(DEFINED BUILD_PICO)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/shared)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/common)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/protocols)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/peripherals)
 
     add_subdirectory(lib)
     add_subdirectory(common)
     add_subdirectory(main)
     add_subdirectory(protocols)
+    add_subdirectory(peripherals)
 else()
     add_compile_definitions(BUILD_ESP32=1)
 
@@ -41,6 +43,8 @@ else()
             add_compile_definitions(M5STACK_SENDER=1)
         endif()
     endif()
+
+    set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/esp_peripherals")
 
     include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 

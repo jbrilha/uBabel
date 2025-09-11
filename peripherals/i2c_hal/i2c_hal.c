@@ -90,6 +90,17 @@ bool i2c_write_bytes(i2c_device_handle_t *device, uint8_t *data, size_t len) {
 #endif
 }
 
+bool i2c_write_byte(i2c_device_handle_t *device, uint8_t data) {
+#if BUILD_ESP32
+    esp_err_t err = i2c_master_transmit(device->esp_handle, &data, 1,
+                                        I2C_MASTER_TIMEOUT_MS);
+    return err == ESP_OK;
+#else
+    int ret = i2c_write_blocking(i2c_default, device->addr, &data, 1, false);
+    return ret >= 0;
+#endif
+}
+
 bool i2c_read_bytes(i2c_device_handle_t *device, uint8_t *data, size_t len) {
 #if BUILD_ESP32
     esp_err_t err = i2c_master_receive(device->esp_handle, data, len,
@@ -98,6 +109,19 @@ bool i2c_read_bytes(i2c_device_handle_t *device, uint8_t *data, size_t len) {
     return err == ESP_OK;
 #else
     int ret = i2c_read_blocking(i2c_default, device->addr, data, len, false);
+
+    return ret >= 0;
+#endif
+}
+
+bool i2c_read_byte(i2c_device_handle_t *device, uint8_t *data) {
+#if BUILD_ESP32
+    esp_err_t err =
+        i2c_master_receive(device->esp_handle, data, 1, I2C_MASTER_TIMEOUT_MS);
+
+    return err == ESP_OK;
+#else
+    int ret = i2c_read_blocking(i2c_default, device->addr, data, 1, false);
 
     return ret >= 0;
 #endif
@@ -214,8 +238,6 @@ void i2c_scan_loop() {
 #endif
 
 void i2c_scan_task(void *params) {
-    i2c_init_default();
-
     i2c_scan_loop();
 
     vTaskDelete(NULL);
