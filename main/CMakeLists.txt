@@ -39,6 +39,7 @@ if(DEFINED BUILD_PICO)
         mma7660
         paj7620
         lcd16x2
+        bmp280
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)
