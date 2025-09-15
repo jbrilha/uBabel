@@ -1,13 +1,14 @@
 #ifndef ESP_LORA_H
 #define ESP_LORA_H
 
-#include "platform.h"
 #include "lora_types.h"
 #include "lora_events.h"
 
-void esp_lora_start_sender();
-void esp_lora_start_receiver();
+bool esp_lora_init(void);
 
-void esp_lora_transmit_packet();
+bool esp_lora_start_sender(void);
+bool esp_lora_start_receiver(void);
+
+void esp_lora_transmit_packet(void);
 
 #endif // !ESP_LORA_H

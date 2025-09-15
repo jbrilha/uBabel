@@ -1,5 +1,7 @@
 #include <sx127x.h>
 
+#include "platform.h"
+
 #include <driver/gpio.h>
 #include <driver/spi_common.h>
 #include <driver/spi_master.h>
@@ -88,29 +90,32 @@ void setup_sx127x() {
     ESP_ERROR_CHECK(sx127x_set_preamble_length(8, &device));
 }
 
-void init_lora_sx127x() {
-    setup_spi_device();
+bool esp_lora_init() {
     setup_sx127x();
+
+    return true;
 }
 
-void start_isr_task() {
+bool start_isr_task() {
     ESP_LOGI(TAG, "starting ISR task");
     BaseType_t task_code = xTaskCreatePinnedToCore(
         handle_interrupt_task, "handle interrupt", 8196, &device, 2,
         &handle_interrupt, xPortGetCoreID());
     if (task_code != pdPASS) {
         ESP_LOGE(TAG, "can't create task %d", task_code);
-        return;
+        return false;
     }
 
     gpio_install_isr_service(0);
     setup_gpio_interrupts((gpio_num_t)IRQ_PIN, &device);
+
+    return true;
 }
 
-void esp_lora_start_receiver() {
+bool esp_lora_start_receiver() {
     ESP_LOGI(TAG, "initializing receiver");
     if (!lora_initialized) {
-        init_lora_sx127x();
+        esp_lora_init();
         lora_initialized = true;
     }
     ESP_LOGI(TAG, "receiver initialized");
@@ -118,7 +123,7 @@ void esp_lora_start_receiver() {
     configure_receiver(&device);
     ESP_LOGI(TAG, "receiver configured");
 
-    start_isr_task();
+    return start_isr_task();
 }
 
 static void esp_lora_sender_task(void *pvParameters) {
@@ -132,22 +137,23 @@ static void esp_lora_sender_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void esp_lora_start_sender() {
+bool esp_lora_start_sender() {
     ESP_LOGI(TAG, "initializing sender");
     if (!lora_initialized) {
-        init_lora_sx127x();
-        lora_initialized = true;
+        return false;
     }
     ESP_LOGI(TAG, "sender initialized");
 
     configure_sender(&device);
     ESP_LOGI(TAG, "sender configured");
 
-    start_isr_task();
+    if (start_isr_task()) {
+        return false;
+    }
     ESP_LOGI(TAG, "ISR task started");
 
-    xTaskCreate(esp_lora_sender_task, "ESP_LORA_SENDER_TASK", 4096, NULL, 2,
-                NULL);
+    return xTaskCreate(esp_lora_sender_task, "ESP_LORA_SENDER_TASK", 4096, NULL,
+                       2, NULL) == pdPASS;
 }
 
 void esp_lora_transmit_packet() { transmit_packet_from_device(&device); }
