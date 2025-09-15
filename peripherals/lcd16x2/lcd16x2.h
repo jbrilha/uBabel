@@ -2,6 +2,7 @@
 #define LCD16x2_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define LCD_TXT_ADDR 0x3e
 
@@ -33,10 +34,17 @@
 bool LCD16x2_init(void);
 
 bool LCD16x2_set_text(const char *str);
+bool LCD16x2_set_scrolling_text(const char *str, const int scroll_period,
+                                int padding);
+bool LCD16x2_set_blinking_text(const char *str, const int blink_period);
 
 bool LCD16x2_clear(void);
 
+bool LCD16x2_reset_cursor(void);
+
 bool LCD16x2_display_on(void);
 bool LCD16x2_display_off(void);
+
+bool LCD16x2_set_cursor(uint8_t col, uint8_t row);
 
 #endif // !LCD16x2_H
