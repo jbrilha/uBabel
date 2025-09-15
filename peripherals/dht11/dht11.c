@@ -132,9 +132,6 @@ bool dht_read_data(int16_t *humidity, int16_t *temperature) {
     if (temperature)
         *temperature = dht_convert_data(data[2], data[3]);
 
-    LOG_DEBUG(TAG, "Sensor data: humidity=%d, temp=%d", *humidity,
-              *temperature);
-
     return true;
 }
 
