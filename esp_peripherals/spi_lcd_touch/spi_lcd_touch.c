@@ -420,3 +420,5 @@ lv_display_t *spi_lcd_get_display(void) {
 
     return display;
 }
+
+bool is_display_initialized(void) { return display_initialized; }

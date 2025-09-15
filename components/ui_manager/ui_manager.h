@@ -9,5 +9,7 @@ void ui_manager_set_lora_rec_widget();
 
 void ui_manager_set_lora_sndr_widget();
 
+void ui_manager_set_temperature_widget();
+
 #endif // !UI_MANAGER_H
 
