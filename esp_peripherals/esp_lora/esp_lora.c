@@ -140,14 +140,15 @@ static void esp_lora_sender_task(void *pvParameters) {
 bool esp_lora_start_sender() {
     ESP_LOGI(TAG, "initializing sender");
     if (!lora_initialized) {
-        return false;
+        lora_initialized = true;
     }
     ESP_LOGI(TAG, "sender initialized");
 
     configure_sender(&device);
     ESP_LOGI(TAG, "sender configured");
 
-    if (start_isr_task()) {
+    if (!start_isr_task()) {
+        ESP_LOGE(TAG, "failed to start isr task");
         return false;
     }
     ESP_LOGI(TAG, "ISR task started");
