@@ -3,11 +3,6 @@ if(DEFINED BUILD_PICO)
         pico_main.c
     )
 
-    target_sources(${PROJECT_NAME} PRIVATE
-        pico_scroll_wrapper.cpp
-        pico_unicorn_wrapper.cpp
-    )
-
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
     )
@@ -19,7 +14,7 @@ if(DEFINED BUILD_PICO)
         pico_stdlib
         pico_scroll
         pico_unicorn
-        pico_buttons
+        pico_tasks
         micro_babel_network
         micro_babel_event
         micro_babel_comm_manager
@@ -40,6 +35,7 @@ if(DEFINED BUILD_PICO)
         paj7620
         lcd16x2
         bmp280
+        app
     )
 
     pico_enable_stdio_usb(${PROJECT_NAME} 1)
