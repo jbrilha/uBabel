@@ -1,11 +1,13 @@
 #pragma once
 
 #include "hardware/pio.h"
+
+#ifdef __cplusplus
 #include "pico_graphics.hpp"
 
 namespace pimoroni {
 
-  class PicoUnicorn {
+class PicoUnicorn {
   public:
     static const int WIDTH = 16;
     static const int HEIGHT = 7;
@@ -17,17 +19,18 @@ namespace pimoroni {
     static const uint32_t ROW_COUNT = 7;
     static const uint32_t ROW_BYTES = 12;
     static const uint32_t BCD_FRAMES = 15; // includes fet discharge frame
-    static const uint32_t BITSTREAM_LENGTH = (ROW_COUNT * ROW_BYTES * BCD_FRAMES);
+    static const uint32_t BITSTREAM_LENGTH =
+        (ROW_COUNT * ROW_BYTES * BCD_FRAMES);
 
   private:
     static PIO bitstream_pio;
     static uint bitstream_sm;
     static uint bitstream_sm_offset;
-  
+
     // must be aligned for 32bit dma transfer
     alignas(4) uint8_t bitstream[BITSTREAM_LENGTH] = {0};
     const uint32_t bitstream_addr = (uint32_t)bitstream;
-    static PicoUnicorn* unicorn;
+    static PicoUnicorn *unicorn;
 
   public:
     PicoUnicorn();
@@ -42,9 +45,29 @@ namespace pimoroni {
     bool is_pressed(uint8_t button);
 
     void update(PicoGraphics *graphics);
+
   private:
     void partial_teardown();
     void dma_safe_abort(uint channel);
-  };
+};
 
+} // namespace pimoroni
+
+extern "C" {
+#endif
+
+#define PICO_UNICORN_A ((uint8_t)12)
+#define PICO_UNICORN_B ((uint8_t)13)
+#define PICO_UNICORN_X ((uint8_t)14)
+#define PICO_UNICORN_Y ((uint8_t)15)
+
+int pico_unicorn_init(void);
+void pico_unicorn_clear(void);
+void pico_unicorn_set_pixel(uint8_t x, uint8_t y, uint8_t v);
+void pico_unicorn_set_pixel_rgb(uint8_t x, uint8_t y, uint8_t r, uint8_t g,
+                                uint8_t b);
+bool pico_unicorn_is_pressed(uint8_t button);
+
+#ifdef __cplusplus
 }
+#endif
