@@ -1,4 +1,4 @@
-.PHONY: all clean pico esp32 pico-clean esp32-clean flash-pico flash-esp32 monitor-esp32 menu menuconfig m5core
+.PHONY: all clean pico esp32 pico-clean esp32-clean flash-pico flash-esp32 monitor-esp32 menu menuconfig m5core target-esp32 target-esp32s3 target-esp32c6
 
 all: pico esp32
 
@@ -61,3 +61,12 @@ menu: menuconfig
 
 menuconfig:
 	idf.py -B $(ESP32_BUILD_DIR) menuconfig
+
+target-esp32:
+	idf.py -B $(ESP32_BUILD_DIR) set-target esp32
+
+target-esp32s3:
+	idf.py -B $(ESP32_BUILD_DIR) set-target esp32s3
+
+target-esp32c6:
+	idf.py -B $(ESP32_BUILD_DIR) set-target esp32c6

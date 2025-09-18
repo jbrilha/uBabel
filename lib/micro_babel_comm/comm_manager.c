@@ -4,7 +4,7 @@
 #include "proto_manager.h"
 #include "event_dispatcher.h"
 #include "network_events.h"
-#include "task.h"
+#include "platform.h"
 #include "lwip/igmp.h"
 #include "lwip/inet.h"
 #include "lwip/ip_addr.h"
@@ -12,8 +12,6 @@
 #include <lwip/netif.h>
 #include <lwip/init.h>
 #include <lwip/etharp.h>
-
-#include "pico/rand.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -21,10 +19,21 @@
 #include <stdio.h>
 #include <errno.h>
 
+#if BUILD_PICO
+#include "pico/rand.h"
+#elif BUILD_ESP32
+#include "esp_system.h"
+
+static inline uint32_t get_rand_32(void)
+{
+    return esp_random();
+}
+#endif
+
 #include "message_parse.h"
 
-#define DISCOVERY_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
-#define DISCOVERY_UDP_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
+#define DISCOVERY_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE * 2)
+#define DISCOVERY_UDP_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE * 2)
 
 #define DISCOVERY_MULTICAST_ADDR "239.255.255.250"
 #define DISCOVERY_PORT 9100
@@ -50,6 +59,8 @@
 
 #define MICRO_BABEL_DISCOVERY_PROTO 31001
 #define HANDSHAKE_MESSAGE_ID 0
+
+static int sock = -1;
 
 typedef enum peer_source
 {
@@ -128,7 +139,6 @@ typedef struct node_register
 static node_register_t *address_book;
 
 static QueueHandle_t proto_discovery_queue;
-static int socket;
 static discovery_message_t *msg = NULL;
 
 static uint8_t my_id[16];
@@ -139,12 +149,12 @@ static QueueHandle_t connection_manager_queue;
 
 static int setup_tcp_socket()
 {
-  int socket = lwip_socket(AF_INET, SOCK_STREAM, 0);
-  if (socket >= 0)
+  int sock = lwip_socket(AF_INET, SOCK_STREAM, 0);
+  if (sock >= 0)
   {
     // Enable keepalive
     int keepalive = 1;
-    if (lwip_setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0)
+    if (lwip_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0)
     {
       LOG_INFO(TAG, "Failed to set SO_KEEPALIVE");
     }
@@ -154,26 +164,26 @@ static int setup_tcp_socket()
     int intvl = 5; // interval between probes (seconds)
     int cnt = 3;   // number of failed probes before considering dead
 
-    lwip_setsockopt(socket, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
-    lwip_setsockopt(socket, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
-    lwip_setsockopt(socket, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));
+    lwip_setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+    lwip_setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
+    lwip_setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &cnt, sizeof(cnt));
 
-    // Initialize the setup of non-blocking socket
+    // Initialize the setup of non-blocking sock
     /*****************************************************
-    int flags = lwip_fcntl(socket, F_GETFL, 0);
+    int flags = lwip_fcntl(sock, F_GETFL, 0);
     if (flags < 0) {
       LOG_ERROR(TAG, "fcntl(F_GETFL) failed, errno=%d\n", errno);
     } else {
       // Set non-blocking
-      if (lwip_fcntl(socket, F_SETFL, flags | O_NONBLOCK) < 0) {
+      if (lwip_fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) {
         LOG_ERROR(TAG,"fcntl(F_SETFL) failed, errno=%d\n", errno);
       } else {
-        LOG_INFO(TAG, "fcntl(F_SETFL) was executed with success to set socket behabiour as non-blocking");
+        LOG_INFO(TAG, "fcntl(F_SETFL) was executed with success to set sock behabiour as non-blocking");
       }
     }
     ******************************************************/
   }
-  return socket;
+  return sock;
 }
 
 static inline bool discovery_check_signature(const uint8_t *buf)
@@ -317,7 +327,7 @@ static int initialize_udp_socket()
   sock = lwip_socket(AF_INET, SOCK_DGRAM, 0);
   if (sock < 0)
   {
-    LOG_INFO(TAG, "failed to create UDP socket\n");
+    LOG_INFO(TAG, "failed to create UDP sock\n");
     return -1;
   }
 
@@ -328,7 +338,7 @@ static int initialize_udp_socket()
 
   if (lwip_bind(sock, (struct sockaddr *)&bind_addr, slen) < 0)
   {
-    LOG_INFO(TAG, "failed to bind UDP socket\n");
+    LOG_INFO(TAG, "failed to bind UDP sock\n");
     lwip_close(sock);
     return -1;
   }
@@ -457,15 +467,11 @@ static int serialize_message_to_frame(const message_t* msg, uint8_t** out_buf, u
 }
 
 static void dispatchMessageToSocket(message_t* msg) {
-  LOG_INFO(TAG, "Dispatching message to socket for destination %s", uuid_to_string(msg->destId));
+  LOG_INFO(TAG, "Dispatching message to sock for destination %s", uuid_to_string(msg->destId));
   if(msg == NULL) {
     LOG_INFO(TAG, "Message to be dispatched is NULL");
     return;
   }
-  if(msg->destId == NULL) {
-    LOG_INFO(TAG, "Message to be dispatched has no destination ID");
-    return;
-  } 
 
   node_register_t *target = msg->effective_destination != NULL ? find_participant_by_id(msg->effective_destination) : find_participant_by_id(msg->destId);
 
@@ -542,7 +548,7 @@ static void handle_tcp_client(node_register_t *participant)
     // 1) Read total message size (2 bytes, network order)
     if (!receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
         // Treat as connection gone
-        LOG_INFO(TAG, "Failed to read size from socket %d", participant->tcp_socket);
+        LOG_INFO(TAG, "Failed to read size from sock %d", participant->tcp_socket);
         goto hard_fail;
     }
     uint16_t msg_size = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
@@ -556,7 +562,7 @@ static void handle_tcp_client(node_register_t *participant)
 
     // 2) Read message code (2 bytes, network order)
     if (!receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
-        LOG_INFO(TAG, "Failed to read code from socket %d", participant->tcp_socket);
+        LOG_INFO(TAG, "Failed to read code from sock %d", participant->tcp_socket);
         goto hard_fail;
     }
     uint16_t msg_code = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
@@ -571,31 +577,31 @@ static void handle_tcp_client(node_register_t *participant)
     message->payload = NULL;
 
     if(payload_len < UUID_SIZE || !receive_from_tcp_exact(participant, message->sourceId, UUID_SIZE, COMM_READ_TIMEOUT_MS)) {
-        LOG_INFO(TAG, "Failed to read sourceID from socket %d", participant->tcp_socket);
+        LOG_INFO(TAG, "Failed to read sourceID from sock %d", participant->tcp_socket);
         goto hard_fail;
     }
 
     if(payload_len < 2 || !receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
-        LOG_INFO(TAG, "Failed to read sourceProto from socket %d", participant->tcp_socket);
+        LOG_INFO(TAG, "Failed to read sourceProto from sock %d", participant->tcp_socket);
         goto hard_fail;
     }
 
     message->sourceProto = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
 
     if(payload_len < UUID_SIZE || !receive_from_tcp_exact(participant, message->destId, UUID_SIZE, COMM_READ_TIMEOUT_MS)) {
-        LOG_INFO(TAG, "Failed to read destID from socket %d", participant->tcp_socket);
+        LOG_INFO(TAG, "Failed to read destID from sock %d", participant->tcp_socket);
         goto hard_fail;
     }
 
     if(payload_len < 2 || !receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
-        LOG_INFO(TAG, "Failed to read destProto from socket %d", participant->tcp_socket);
+        LOG_INFO(TAG, "Failed to read destProto from sock %d", participant->tcp_socket);
         goto hard_fail;
     }
 
     message->destProto = (uint16_t) ((hdr2[0] << 8) | hdr2[1]);
 
     if(payload_len < 2 || !receive_from_tcp_exact(participant, hdr2, 2, COMM_READ_TIMEOUT_MS)) {
-        LOG_INFO(TAG, "Failed to read payloadSize from socket %d", participant->tcp_socket);
+        LOG_INFO(TAG, "Failed to read payloadSize from sock %d", participant->tcp_socket);
         goto hard_fail;
     } 
 
@@ -611,7 +617,7 @@ static void handle_tcp_client(node_register_t *participant)
       }
 
        if(payload_len < message->payload_size || !receive_from_tcp_exact(participant, message->payload, message->payload_size, COMM_READ_TIMEOUT_MS)) {
-        LOG_INFO(TAG, "Failed to read payload from socket %d", participant->tcp_socket);
+        LOG_INFO(TAG, "Failed to read payload from sock %d", participant->tcp_socket);
         goto hard_fail;
       }
     }
@@ -635,7 +641,7 @@ static void handle_tcp_client(node_register_t *participant)
 
 hard_fail:
     // Close & mark down; you can emit your NODE_FAILED notification here once
-    LOG_INFO(TAG, "Closing socket %d", participant->tcp_socket);
+    LOG_INFO(TAG, "Closing sock %d", participant->tcp_socket);
     lwip_close(participant->tcp_socket);
     participant->tcp_socket = -1;
     participant->status = DISCONNECTED;
@@ -784,10 +790,10 @@ static void socket_manager_task(void *params)
   LOG_INFO(TAG, "Starting to receive multicast messages in IP: %s\n", (char *)params);
 
   // Start by cleaning up from a previous execution:
-  if (socket >= 0)
+  if (sock >= 0)
   {
-    lwip_close(socket);
-    socket = -1;
+    lwip_close(sock);
+    sock = -1;
   }
 
   if (msg != NULL)
@@ -796,11 +802,11 @@ static void socket_manager_task(void *params)
     msg = NULL;
   }
 
-  socket = initialize_udp_socket((char *)params);
+  sock = initialize_udp_socket((char *)params);
 
-  if (socket < 0)
+  if (sock < 0)
   {
-    printf("Failed to open socker (value is %d)\n", socket);
+    printf("Failed to open socker (value is %d)\n", sock);
     vTaskDelete(NULL);
   }
   socklen_t slen;
@@ -812,7 +818,7 @@ static void socket_manager_task(void *params)
 
     uint32_t now = now_ms();
     uint32_t next_deadline = UINT32_MAX;
-    int highest_socket = socket;
+    int highest_socket = sock;
     fd_set rfds;
     FD_ZERO(&rfds);
     xSemaphoreTake(comm_mutex, portMAX_DELAY);
@@ -824,14 +830,14 @@ static void socket_manager_task(void *params)
         FD_SET(current->tcp_socket, &rfds);
         if (current->tcp_socket > highest_socket)
           highest_socket = current->tcp_socket;
-        LOG_INFO(TAG, "Added the tcp socket of %s:%d to rfds (highest socket: %d)", ipv4_to_str(current->active_ip), current->port, highest_socket);
+        LOG_INFO(TAG, "Added the tcp sock of %s:%d to rfds (highest sock: %d)", ipv4_to_str(current->active_ip), current->port, highest_socket);
       }
       current = current->next;
     }
     xSemaphoreGive(comm_mutex);
 
-    FD_SET(socket, &rfds);
-    LOG_INFO(TAG, "Added the udp socket to rfds (highest socket: %d)", highest_socket);
+    FD_SET(sock, &rfds);
+    LOG_INFO(TAG, "Added the udp sock to rfds (highest sock: %d)", highest_socket);
 
     highest_socket++;
 
@@ -872,7 +878,7 @@ static void socket_manager_task(void *params)
       xSemaphoreGive(comm_mutex);
 
       // Check the UDP Socket
-      if (FD_ISSET(socket, &rfds))
+      if (FD_ISSET(sock, &rfds))
       {
         LOG_INFO(TAG, "processing message from the udp port");
         // UDP SOCKET RECEIVED SOMETHING - Potencially a multicast announcement.
@@ -883,7 +889,7 @@ static void socket_manager_task(void *params)
           continue;
         }
         slen = sizeof(msg->sender_addr);
-        msg->messagelenght = lwip_recvfrom(socket, msg->buffer, MAX_UDP_PACKET_SIZE, 0,
+        msg->messagelenght = lwip_recvfrom(sock, msg->buffer, MAX_UDP_PACKET_SIZE, 0,
                                            (struct sockaddr *)&(msg->sender_addr), &slen);
         if (msg->messagelenght >= 0)
         {
@@ -994,22 +1000,22 @@ static void socket_manager_task(void *params)
 static void handle_network_up_event(event_t *ev)
 {
   if (ev->payload != NULL && ev->payload_size > 0)
-    xTaskCreate(socket_manager_task, "proto_discovery_udp", DISCOVERY_UDP_TASK_STACK_SIZE, ((network_event_t *)ev->payload)->ip, 2, NULL);
+    xTaskCreate(socket_manager_task, "proto_disc_udp", DISCOVERY_UDP_TASK_STACK_SIZE, ((network_event_t *)ev->payload)->ip, 2, NULL);
   else
-    xTaskCreate(socket_manager_task, "proto_discovery_udp", DISCOVERY_UDP_TASK_STACK_SIZE, NULL, 2, NULL);
+    xTaskCreate(socket_manager_task, "proto_disc_udp", DISCOVERY_UDP_TASK_STACK_SIZE, NULL, 2, NULL);
 }
 
 static void handle_network_down_event(event_t *ev)
 {
   xSemaphoreTake(comm_mutex, portMAX_DELAY);
 
-  TaskHandle_t udpTask = xTaskGetHandle("proto_discovery_udp");
+  TaskHandle_t udpTask = xTaskGetHandle("proto_disc_udp");
   if (udpTask != NULL)
     vTaskDelete(udpTask);
 
-  // Destroy UDP socket
-  lwip_close(socket);
-  socket = -1;
+  // Destroy UDP sock
+  lwip_close(sock);
+  sock = -1;
 
   // Close TCP connections and remove all information about participants
   while (address_book != NULL)
@@ -1143,6 +1149,8 @@ static void processDiscoveryMessage(event_t *ev)
 
 static void comm_manager_task(void *params)
 {
+  comm_mutex = xSemaphoreCreateMutex();
+
   event_t *event;
 
   while (true)
@@ -1231,11 +1239,9 @@ void generate_random_uuid(uint8_t uuid[16])
 
 bool comm_manager_init(void)
 {
-  socket = -1;
+  sock = -1;
 
   generate_random_uuid(my_id);
-
-  comm_mutex = xSemaphoreCreateMutex();
 
   // Initialize the discovery queue
   proto_discovery_queue = xQueueCreate(10, sizeof(event_t *));
@@ -1445,6 +1451,8 @@ bool send_message(event_t *msg, const uint8_t *destination_id)
     free_event(msg);
   } 
   xSemaphoreGive(comm_mutex);
+
+    return true;
 }
 
 bool send_message_multiple(event_t *msg, const uint8_t **destinations, uint8_t n_destinations)
@@ -1457,6 +1465,8 @@ bool send_message_multiple(event_t *msg, const uint8_t **destinations, uint8_t n
   }
 
   xSemaphoreGive(comm_mutex);
+
+  return true;
 }
 
 void get_local_identifier(uint8_t *id)

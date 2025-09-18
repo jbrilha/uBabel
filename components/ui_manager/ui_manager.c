@@ -1,7 +1,6 @@
 #include "ui_manager.h"
 
-#include "lvgl_lora_receiver_widget.h"
-#include "lvgl_lora_sender_widget.h"
+#include "lvgl_ui.h"
 #include "misc/lv_types.h"
 #include "spi_lcd_touch.h"
 #include "ui_event_monitor.h"
@@ -18,9 +17,8 @@ void ui_manager_init(void) {
                 NULL             // Task handle
     );
 
-    // ensure display init before returning
-    while (spi_lcd_get_display() == NULL || spi_lcd_get_lvgl_lock() == NULL) {
-        vTaskDelay(pdMS_TO_TICKS(10));
+    while (!is_display_initialized()) {
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     ui_event_monitor_init();
@@ -48,4 +46,16 @@ void ui_manager_set_lora_sndr_widget() {
     }
 
     lora_sndr_widget_init(display, lvgl_lock);
+}
+
+void ui_manager_set_temperature_widget() {
+    lv_display_t *display;
+    _lock_t *lvgl_lock;
+
+    if ((display = spi_lcd_get_display()) == NULL ||
+        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+        return;
+    }
+
+    temperature_widget_init(display, lvgl_lock, true, true);
 }
