@@ -11,9 +11,18 @@
 #include "common_events.h"
 #include "event_dispatcher.h"
 #include "network_events.h"
-#include "pico_tasks.h"
 #include "proto_iot_control.h"
 #include "proto_simple_overlay.h"
+
+#if BUILD_ESP32
+// TODO place somewhere else
+#define EVENT_BUTTON_A_PRESSED 201
+#define EVENT_BUTTON_B_PRESSED 202
+#define EVENT_BUTTON_X_PRESSED 203
+#define EVENT_BUTTON_Y_PRESSED 204
+#elif BUILD_PICO
+#include "pico_tasks.h"
+#endif
 
 #define REQUEST_PRINT 800
 #define REQUEST_SHOW 801
