@@ -6,8 +6,6 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_wifi_types_generic.h"
-#include "freertos/idf_additions.h"
-#include "freertos/projdefs.h"
 #include "mem_check.h"
 #include "nvs_flash.h"
 
@@ -15,6 +13,8 @@
 #include "network_manager.h"
 
 #include "esp_lora.h"
+#include "i2c_hal.h"
+#include "platform.h"
 #include "spi_manager.h"
 #include "ui_manager.h"
 
@@ -26,6 +26,13 @@
 #include "proto_iot_control.h"
 #include "proto_simple_overlay.h"
 
+#include "bmp280.h"
+#include "dht11.h"
+#include "lcd16x2.h"
+#include "mma7660.h"
+#include "paj7620.h"
+#include "tca9548.h"
+
 static const char *TAG = "M5_MAIN";
 
 typedef enum { node, device, action, parameter } navigation_mode_t;
@@ -34,7 +41,7 @@ static QueueHandle_t application_queue;
 static iot_node_handle_t node_handle;
 static iot_device_handle_t device_handle;
 static navigation_mode_t nav;
-static const device_t* device_info;
+static const device_t *device_info;
 
 void application_task(void *pvParameters) {
     char output[256];
@@ -65,6 +72,25 @@ void application_init() {
                 NULL, 3, NULL);
 }
 
+void init_peripherals(void) {
+    spi_manager_init();
+    ui_manager_init();
+    esp_lora_init();
+
+#if M5STACK_RECEIVER
+    ui_manager_set_lora_rec_widget();
+    esp_lora_start_receiver();
+#elif M5STACK_SENDER
+    ui_manager_set_lora_sndr_widget();
+    esp_lora_start_sender();
+#endif
+
+    // i2c_init_default();
+
+    // TCA9548_init();
+    // TCA9548_open_all_channels();
+}
+
 void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
 
@@ -78,18 +104,7 @@ void app_main(void) {
 
     event_dispatcher_init();
     comm_manager_init();
-
-    spi_manager_init();
-
-    ui_manager_init();
-
-#if M5STACK_RECEIVER
-    ui_manager_set_lora_rec_widget();
-    esp_lora_start_receiver();
-#elif M5STACK_SENDER
-    ui_manager_set_lora_sndr_widget();
-    esp_lora_start_sender();
-#endif
+    init_peripherals();
 
     xTaskCreate(network_manager_task, // Task function
                 "NetworkManager",     // Task name
@@ -103,4 +118,6 @@ void app_main(void) {
     iot_control_protocol_init();
 
     application_init();
+
+    vTaskDelete(NULL);
 }
