@@ -12,6 +12,7 @@
 #include "event_dispatcher.h"
 #include "network_manager.h"
 
+#include "app.h"
 #include "esp_lora.h"
 #include "i2c_hal.h"
 #include "platform.h"
@@ -35,55 +36,24 @@
 
 static const char *TAG = "M5_MAIN";
 
-typedef enum { node, device, action, parameter } navigation_mode_t;
-
-static QueueHandle_t application_queue;
-static iot_node_handle_t node_handle;
-static iot_device_handle_t device_handle;
-static navigation_mode_t nav;
-static const device_t *device_info;
-
-void application_task(void *pvParameters) {
-    char output[256];
-    event_t *event = NULL;
-
-    while (true) {
-        memset(output, 0, 256); // Clear text buffer
-        if (xQueueReceive(application_queue, &event, portMAX_DELAY) == pdTRUE) {
-            printf("Application main loop has received event: type=%d "
-                   "subtype=%d\n",
-                   event->type, event->subtype);
-
-            free_event(event);
-            event = NULL;
-        }
-    }
-}
-
-void application_init() {
-    application_queue = xQueueCreate(10, sizeof(event_t *));
-
-    nav = node;
-    device_info = get_device_info_data();
-
-    node_handle = initialize_node_iterator();
-
-    xTaskCreate(application_task, "main_app_task", configMINIMAL_STACK_SIZE,
-                NULL, 3, NULL);
-}
-
 void init_peripherals(void) {
     spi_manager_init();
     ui_manager_init();
-    esp_lora_init();
 
 #if M5STACK_RECEIVER
+    esp_lora_init();
+
     ui_manager_set_lora_rec_widget();
     esp_lora_start_receiver();
 #elif M5STACK_SENDER
+    esp_lora_init();
+
     ui_manager_set_lora_sndr_widget();
     esp_lora_start_sender();
+#else
+    ui_manager_set_messenger_widget();
 #endif
+
 
     // i2c_init_default();
 

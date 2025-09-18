@@ -1,5 +1,7 @@
 #include "ui_manager.h"
 
+#include "lvgl_flex_layout.h"
+#include "lvgl_messenger_widget.h"
 #include "lvgl_ui.h"
 #include "misc/lv_types.h"
 #include "spi_lcd_touch.h"
@@ -58,4 +60,19 @@ void ui_manager_set_temperature_widget() {
     }
 
     temperature_widget_init(display, lvgl_lock, true, true);
+}
+
+void ui_manager_set_messenger_widget() {
+    lv_display_t *display;
+    _lock_t *lvgl_lock;
+
+    if ((display = spi_lcd_get_display()) == NULL ||
+        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+        return;
+    }
+
+    lvgl_flex_layout_init(display, lvgl_lock);
+    messenger_widget_init_on_container(lvgl_flex_layout_get_col(0), lvgl_lock);
+    temperature_widget_init_on_container(lvgl_flex_layout_get_col(1), lvgl_lock,
+                                         true, true);
 }

@@ -1,11 +1,20 @@
 #include "ui_event_monitor.h"
 
+#include "comm_manager.h"
+#include "common_events.h"
 #include "event_dispatcher.h"
 #include "lora_events.h"
 #include "lvgl_ui.h"
+#include "network_events.h"
+
+#include "platform.h"
 
 #define UI_MONITOR_TASK_STACK_SIZE (4 * 1024)
 #define UI_MONITOR_TASK_PRIORITY 2
+
+// TODO these are initialized in the application files
+#define REQUEST_PRINT 800
+#define REQUEST_SHOW 801
 
 #define Q_LEN 10
 
@@ -79,19 +88,35 @@ static void ui_event_monitor_task(void *pvParameters) {
 void ui_event_monitor_init(void) {
     ui_event_queue = xQueueCreate(Q_LEN, sizeof(event_t *));
 
-    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-                              UI_EVENT_REC_TEMP);
-    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-                              UI_EVENT_REC_MSG);
-
+    // event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+    //                           UI_EVENT_REC_TEMP);
+    // event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+    //                           UI_EVENT_REC_MSG);
+    //
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               UI_EVENT_REC_LORA);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               UI_EVENT_SND_LORA);
 
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              EVENT_SUBTYPE_NETWORK_UP);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              EVENT_SUBTYPE_NETWORK_DOWN);
+
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              NOTIFICATION_NEIGHBOR_UP);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              NOTIFICATION_NEIGHBOR_DOWN);
+
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST,
+                              REQUEST_PRINT);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST,
+                              REQUEST_SHOW);
+
     xTaskCreate(ui_event_monitor_task, "UI_EVENT_MONITOR_TASK",
                 UI_MONITOR_TASK_STACK_SIZE, NULL, UI_MONITOR_TASK_PRIORITY,
                 NULL);
+
 
     // xTaskCreate(ui_event_test_task, "UI_EVENT_TEST_TASK",
     //             UI_MONITOR_TASK_STACK_SIZE, NULL, UI_MONITOR_TASK_PRIORITY,
@@ -112,11 +137,41 @@ static void handle_ui_notif(event_t *e) {
     } break;
     case UI_EVENT_REC_LORA: {
         lora_rec_widget_set_info_from_event(e);
-            break;
+        break;
     }
     case UI_EVENT_SND_LORA: {
         lora_sndr_widget_send_transmission(e);
-            break;
+        break;
+    }
+
+    case EVENT_SUBTYPE_NETWORK_UP: {
+        char text[256];
+        printf("Network: %s\n", ((network_event_t *)e->payload)->ssid);
+        printf("IP: %s\n", ((network_event_t *)e->payload)->ip);
+        sprintf(text, "Network UP: %s %s",
+                ((network_event_t *)e->payload)->ssid,
+                ((network_event_t *)e->payload)->ip);
+        puts(text);
+        break;
+    }
+    case EVENT_SUBTYPE_NETWORK_DOWN: {
+        break;
+    }
+    case NOTIFICATION_NEIGHBOR_UP: {
+        char text[256];
+        sprintf(text, "Neighbor up: %s", uuid_to_string((uint8_t *)e->payload));
+            LOG_ERROR(TAG, "%s",text);
+        // puts(text);
+        messenger_widget_set_txt(text);
+        break;
+    }
+    case NOTIFICATION_NEIGHBOR_DOWN: {
+        char text[256];
+        sprintf(text, "Neighbor down: %s",
+                uuid_to_string((uint8_t *)e->payload));
+        puts(text);
+        messenger_widget_set_txt(text);
+        break;
     }
     default:
         break;
@@ -127,6 +182,13 @@ static void handle_ui_notif(event_t *e) {
 
 static void handle_ui_request(event_t *e) {
     switch (e->subtype) {
+    case REQUEST_PRINT:
+    case REQUEST_SHOW: {
+        char text[256];
+        memcpy(text, e->payload, strlen((char *)e->payload));
+        puts(text);
+        messenger_widget_set_txt(text);
+    }
     default:
         break;
     }
