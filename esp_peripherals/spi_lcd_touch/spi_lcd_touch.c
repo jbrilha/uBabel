@@ -85,14 +85,14 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define TOUCH_CS_PIN 15
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #define LCD_CS_PIN 10
-#define LCD_RST_PIN 6
-#define LCD_DC_PIN 7
+#define LCD_RST_PIN 7
+#define LCD_DC_PIN 6
 #define LCD_BL_PIN 5
 
 #define TOUCH_MOSI_PIN 39
 #define TOUCH_CLK_PIN 38
 #define TOUCH_MISO_PIN 40
-#define TOUCH_CS_PIN 16
+#define TOUCH_CS_PIN 8
 #endif
 
 // Bit number used to represent command and parameter
@@ -331,6 +331,58 @@ void init_touch_spi() {
 }
 #endif
 
+#define CORRECTION_OFFSET 25
+
+static void process_coords(esp_lcd_touch_handle_t tp, uint16_t *x, uint16_t *y,
+                           uint16_t *strength, uint8_t *point_num,
+                           uint8_t max_point_num) {
+    // dynamic offset corrections
+    uint32_t y_coord = *y;
+    uint32_t y_max_dist = tp->config.y_max / 2;
+    if (y_coord > y_max_dist) {
+        uint32_t y_dist_from_center = y_coord - y_max_dist;
+        int32_t y_offset =
+            (y_dist_from_center * CORRECTION_OFFSET) / y_max_dist;
+        y_coord += y_offset;
+    } else {
+        uint32_t y_dist_from_center = y_max_dist - y_coord;
+        int32_t y_offset =
+            (y_dist_from_center * CORRECTION_OFFSET) / y_max_dist;
+        if (y_coord >= y_offset) {
+            y_coord -= y_offset;
+        } else {
+            y_coord = 0;
+        }
+    }
+
+    uint32_t x_coord = *x;
+    uint32_t x_max_dist = tp->config.x_max / 2;
+    if (x_coord > x_max_dist) {
+        uint32_t x_dist_from_center = x_coord - x_max_dist;
+        int32_t x_offset =
+            (x_dist_from_center * CORRECTION_OFFSET) / x_max_dist;
+        x_coord += x_offset;
+    } else {
+        uint32_t x_dist_from_center = x_max_dist - x_coord;
+        int32_t x_offset =
+            (x_dist_from_center * CORRECTION_OFFSET) / x_max_dist;
+        if (x_coord >= x_offset) {
+            x_coord -= x_offset;
+        } else {
+            x_coord = 0;
+        }
+    }
+
+    // clamp clamp
+    if (x_coord > tp->config.x_max)
+        x_coord = tp->config.x_max;
+    if (y_coord > tp->config.y_max)
+        y_coord = tp->config.y_max;
+
+    *x = x_coord;
+    *y = y_coord;
+}
+
 void init_touch() {
     esp_lcd_panel_io_handle_t tp_io_handle = NULL;
     esp_lcd_panel_io_spi_config_t tp_io_config =
@@ -350,6 +402,7 @@ void init_touch() {
                 .mirror_x = 0,
                 .mirror_y = CONFIG_LCD_MIRROR_Y,
             },
+        .process_coordinates = process_coords,
     };
     esp_lcd_touch_handle_t tp = NULL;
 
@@ -380,7 +433,9 @@ void lcd_init_task(void *pvParameters) {
     ESP_LOGI(TAG, "Initialize LVGL library");
     init_lvgl();
 
-#if CONFIG_LCD_ORIENTATION_LANDSCAPE
+#if CONFIG_LCD_ORIENTATION_LANDSCAPE_90
+    lv_display_set_rotation(display, LV_DISPLAY_ROTATION_90);
+#elif CONFIG_LCD_ORIENTATION_LANDSCAPE_270
     lv_display_set_rotation(display, LV_DISPLAY_ROTATION_270);
 #endif
 
