@@ -13,5 +13,7 @@ void ui_manager_set_temperature_widget();
 
 void ui_manager_set_messenger_widget();
 
+void ui_manager_set_tardis_widget();
+
 #endif // !UI_MANAGER_H
 

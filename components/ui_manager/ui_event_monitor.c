@@ -4,6 +4,7 @@
 #include "common_events.h"
 #include "event_dispatcher.h"
 #include "lora_events.h"
+#include "lvgl_tardis_widget.h"
 #include "lvgl_ui.h"
 #include "network_events.h"
 
@@ -110,13 +111,11 @@ void ui_event_monitor_init(void) {
 
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST,
                               REQUEST_PRINT);
-    event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST,
-                              REQUEST_SHOW);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST, REQUEST_SHOW);
 
     xTaskCreate(ui_event_monitor_task, "UI_EVENT_MONITOR_TASK",
                 UI_MONITOR_TASK_STACK_SIZE, NULL, UI_MONITOR_TASK_PRIORITY,
                 NULL);
-
 
     // xTaskCreate(ui_event_test_task, "UI_EVENT_TEST_TASK",
     //             UI_MONITOR_TASK_STACK_SIZE, NULL, UI_MONITOR_TASK_PRIORITY,
@@ -160,9 +159,9 @@ static void handle_ui_notif(event_t *e) {
     case NOTIFICATION_NEIGHBOR_UP: {
         char text[256];
         sprintf(text, "Neighbor up: %s", uuid_to_string((uint8_t *)e->payload));
-            LOG_ERROR(TAG, "%s",text);
-        // puts(text);
-        messenger_widget_set_txt(text);
+        LOG_ERROR(TAG, "%s", text);
+        puts(text);
+        tardis_widget_set_notif_txt(text);
         break;
     }
     case NOTIFICATION_NEIGHBOR_DOWN: {
@@ -170,7 +169,7 @@ static void handle_ui_notif(event_t *e) {
         sprintf(text, "Neighbor down: %s",
                 uuid_to_string((uint8_t *)e->payload));
         puts(text);
-        messenger_widget_set_txt(text);
+        tardis_widget_set_notif_txt(text);
         break;
     }
     default:

@@ -76,3 +76,15 @@ void ui_manager_set_messenger_widget() {
     temperature_widget_init_on_container(lvgl_flex_layout_get_col(1), lvgl_lock,
                                          true, true);
 }
+
+void ui_manager_set_tardis_widget() {
+    lv_display_t *display;
+    _lock_t *lvgl_lock;
+
+    if ((display = spi_lcd_get_display()) == NULL ||
+        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+        return;
+    }
+
+    tardis_widget_init(display, lvgl_lock);
+}
