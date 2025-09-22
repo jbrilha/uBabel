@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "m5_buttons.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -51,9 +52,10 @@ void init_peripherals(void) {
     ui_manager_set_lora_sndr_widget();
     esp_lora_start_sender();
 #else
-    ui_manager_set_messenger_widget();
+    ui_manager_set_tardis_widget();
 #endif
 
+    run_m5_buttons_task();
 
     // i2c_init_default();
 
@@ -87,7 +89,7 @@ void app_main(void) {
     simple_overlay_network_init();
     iot_control_protocol_init();
 
-    application_init();
+    // application_init(); // the UI handles all the logic and interactions with the iot proto
 
     vTaskDelete(NULL);
 }
