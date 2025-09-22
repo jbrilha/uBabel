@@ -4,7 +4,6 @@ set(COMP_SRCS
     lvgl_messenger_widget.c
     lvgl_lora_receiver_widget.c
     lvgl_lora_sender_widget.c
-    lvgl_tardis_widget.c
 )
 
 idf_component_register(SRCS ${COMP_SRCS}

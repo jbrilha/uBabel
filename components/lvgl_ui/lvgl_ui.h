@@ -6,6 +6,5 @@
 #include "lvgl_temperature_widget.h"
 #include "lvgl_lora_sender_widget.h"
 #include "lvgl_lora_receiver_widget.h"
-#include "lvgl_tardis_widget.h"
 
 #endif
