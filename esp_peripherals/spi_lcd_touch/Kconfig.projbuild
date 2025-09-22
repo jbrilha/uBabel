@@ -22,15 +22,20 @@ menu "LCD / Touch Configuration"
         help
             Enable this option if you wish to use display touch.
 
-    choice LCD_ORIENTATION_LANDSCAPE
-        prompt "Landscape orientation"
+    config LCD_ORIENTATION_LANDSCAPE
+        bool "Use landscape orientation"
+        default n
+        help
+            Enable to use display in landscape mode
+
+    choice LCD_LANDSCAPE_ROTATION
+        prompt "Landscape rotation"
+        depends on LCD_ORIENTATION_LANDSCAPE
         default LCD_ORIENTATION_LANDSCAPE_90
         help
-            Use display in landscape mode with given rotation
-
+            Select the rotation for landscape mode
         config LCD_ORIENTATION_LANDSCAPE_90
             bool "90 Degrees"
-
         config LCD_ORIENTATION_LANDSCAPE_270
             bool "270 Degrees"
     endchoice
