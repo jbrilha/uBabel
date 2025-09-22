@@ -5,6 +5,7 @@
 
 #define NOTIFICATION_NEIGHBOR_UP 501
 #define NOTIFICATION_NEIGHBOR_DOWN 502
+#define REQUEST_REFRESH_MENU 503
 
 #ifdef __cplusplus
 extern "C" {
