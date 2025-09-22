@@ -1,21 +1,47 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "esp_event.h"
 #include "esp_log.h"
-#include "esp_netif.h"
-#include "esp_wifi.h"
-#include "esp_wifi_types_generic.h"
 #include "mem_check.h"
 #include "nvs_flash.h"
-#include "spi_lcd_touch.h"
-#include "tcp.h"
-#include "udp.h"
 
+#include "platform.h"
 #include "event_dispatcher.h"
 #include "network_manager.h"
 
-static const char *TAG = "ESP32_MAIN";
+#include "esp_lora.h"
+#include "i2c_hal.h"
+#include "spi_manager.h"
+#include "ui_manager.h"
+
+#include "comm_manager.h"
+#include "common_events.h"
+#include "event_dispatcher.h"
+#include "network_events.h"
+#include "network_manager.h"
+#include "proto_iot_control.h"
+#include "proto_simple_overlay.h"
+
+#include "bmp280.h"
+#include "dht11.h"
+#include "lcd16x2.h"
+#include "mma7660.h"
+#include "paj7620.h"
+#include "tca9548.h"
+
+static const char *TAG = "M5_MAIN";
+
+void init_peripherals(void) {
+    spi_manager_init();
+    ui_manager_init();
+
+    ui_manager_set_tardis_widget();
+
+    // i2c_init_default();
+
+    // TCA9548_init();
+    // TCA9548_open_all_channels();
+}
 
 void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -29,32 +55,19 @@ void app_main(void) {
     );
 
     event_dispatcher_init();
+    comm_manager_init();
+    init_peripherals();
 
-    // wifi_init();
-    //
-    // vTaskDelay(pdMS_TO_TICKS(3000));
-    //
-    // xTaskCreate(udp_server_task, "udp_server", UDP_SERVER_TASK_STACK_SIZE,
-    // NULL,
-    //             UDP_SERVER_TASK_PRIORITY, NULL);
-    // xTaskCreate(tcp_server_task, "tcp_server", TCP_SERVER_TASK_STACK_SIZE,
-    // NULL,
-    //             TCP_SERVER_TASK_PRIORITY, NULL);
-
-    // xTaskCreate(
-    //     network_manager_task,   // Task function
-    //     "NetworkManager",       // Task name
-    //     4096,                   // Stack size in words
-    //     NULL,                   // Task parameters
-    //     1,                      // Priority
-    //     NULL                    // Task handle
-    // );
-
-    xTaskCreate(lcd_init_task,   // Task function
-                "lcd_init_task", // Task name
-                4096,            // Stack size in words
-                NULL,            // Task parameters
-                1,               // Priority
-                NULL             // Task handle
+    xTaskCreate(network_manager_task, // Task function
+                "NetworkManager",     // Task name
+                4096,                 // Stack size in words
+                NULL,                 // Task parameters
+                5,                    // Priority
+                NULL                  // Task handle
     );
+
+    simple_overlay_network_init();
+    iot_control_protocol_init();
+
+    vTaskDelete(NULL);
 }
