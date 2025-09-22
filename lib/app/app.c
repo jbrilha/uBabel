@@ -28,7 +28,14 @@
 #define REQUEST_SHOW 801
 
 #define APP_TASK_PRIORITY (tskIDLE_PRIORITY + 2UL)
-#define APP_TASK_STACK_SIZE (configMINIMAL_STACK_SIZE)
+#ifdef BUILD_ESP32
+// it overflows with less than this
+#define STACK_SIZE (configMINIMAL_STACK_SIZE * 2)
+#else
+#define STACK_SIZE (configMINIMAL_STACK_SIZE)
+#endif
+
+#define APP_TASK_STACK_SIZE STACK_SIZE
 
 static const char *TAG = "APPLICATION";
 
