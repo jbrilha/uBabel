@@ -439,7 +439,7 @@ void network_manager_task(void *params) {
                             event_t *event =
                                 create_event(EVENT_TYPE_NOTIFICATION,
                                              EVENT_SUBTYPE_NETWORK_UP, evt,
-                                             sizeof(network_event_t *));
+                                             sizeof(network_event_t));
 
                             if (event != NULL) {
                                 event_dispatcher_post(event);
