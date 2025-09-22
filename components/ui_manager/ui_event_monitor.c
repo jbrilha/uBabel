@@ -9,7 +9,9 @@
 #include "lvgl_ui.h"
 #include "network_events.h"
 
+#ifdef M5STACK_CORE_BASIC
 #include "m5_buttons.h"
+#endif
 #include "platform.h"
 
 #define UI_MONITOR_TASK_STACK_SIZE (4 * 1024)
@@ -91,12 +93,14 @@ static void ui_event_monitor_task(void *pvParameters) {
 void ui_event_monitor_init(void) {
     ui_event_queue = xQueueCreate(Q_LEN, sizeof(event_t *));
 
+#ifdef M5STACK_CORE_BASIC
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_M5_BUTTON_A_PRESSED);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_M5_BUTTON_B_PRESSED);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_M5_BUTTON_C_PRESSED);
+#endif
 
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_SUBTYPE_NETWORK_UP);
@@ -172,6 +176,7 @@ static void handle_ui_notif(event_t *e) {
         tardis_widget_set_notif_txt(text);
         break;
     }
+#ifdef M5STACK_CORE_BASIC
     case EVENT_M5_BUTTON_A_PRESSED: {
         tardis_widget_menu_prev();
         break;
@@ -184,6 +189,7 @@ static void handle_ui_notif(event_t *e) {
         tardis_widget_menu_next();
         break;
     }
+#endif
     default:
         break;
     }
