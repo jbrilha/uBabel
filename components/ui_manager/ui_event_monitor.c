@@ -9,6 +9,7 @@
 #include "lvgl_ui.h"
 #include "network_events.h"
 
+#include "m5_buttons.h"
 #include "platform.h"
 
 #define UI_MONITOR_TASK_STACK_SIZE (4 * 1024)
@@ -90,21 +91,17 @@ static void ui_event_monitor_task(void *pvParameters) {
 void ui_event_monitor_init(void) {
     ui_event_queue = xQueueCreate(Q_LEN, sizeof(event_t *));
 
-    // event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-    //                           UI_EVENT_REC_TEMP);
-    // event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-    //                           UI_EVENT_REC_MSG);
-    //
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-                              UI_EVENT_REC_LORA);
+                              EVENT_M5_BUTTON_A_PRESSED);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
-                              UI_EVENT_SND_LORA);
+                              EVENT_M5_BUTTON_B_PRESSED);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              EVENT_M5_BUTTON_C_PRESSED);
 
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_SUBTYPE_NETWORK_UP);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_SUBTYPE_NETWORK_DOWN);
-
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               NOTIFICATION_NEIGHBOR_UP);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
@@ -154,9 +151,11 @@ static void handle_ui_notif(event_t *e) {
                 ((network_event_t *)e->payload)->ssid,
                 ((network_event_t *)e->payload)->ip);
         puts(text);
+        tardis_widget_set_network_up_info((network_event_t *)e->payload);
         break;
     }
     case EVENT_SUBTYPE_NETWORK_DOWN: {
+        tardis_widget_set_network_down();
         break;
     }
     case NOTIFICATION_NEIGHBOR_UP: {
@@ -173,6 +172,18 @@ static void handle_ui_notif(event_t *e) {
         tardis_widget_set_notif_txt(text);
         break;
     }
+    case EVENT_M5_BUTTON_A_PRESSED: {
+        tardis_widget_menu_prev();
+        break;
+    }
+    case EVENT_M5_BUTTON_B_PRESSED: {
+        tardis_widget_menu_select();
+        break;
+    }
+    case EVENT_M5_BUTTON_C_PRESSED: {
+        tardis_widget_menu_next();
+        break;
+    }
     default:
         break;
     }
@@ -187,7 +198,7 @@ static void handle_ui_request(event_t *e) {
         char text[256];
         memcpy(text, e->payload, strlen((char *)e->payload));
         puts(text);
-        tardis_widget_set_print_txt(text);
+        // tardis_widget_set_print_txt(text);
     }
     case REQUEST_REFRESH_MENU: {
         tardis_widget_populate_menu();
