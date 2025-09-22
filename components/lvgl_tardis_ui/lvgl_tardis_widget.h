@@ -11,7 +11,8 @@ void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock);
 
 void tardis_widget_set_notif_txt(const char *notif);
 
-void tardis_widget_set_network_info(network_event_t *e);
+void tardis_widget_set_network_up_info(network_event_t *e);
+void tardis_widget_set_network_down(void);
 
 void tardis_widget_populate_menu(void);
 

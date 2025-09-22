@@ -7,10 +7,12 @@
 
 static const char *SEP = "    |  ";
 static const char *TAG = "TaRDIS Widget";
+static const char *NOT_CONNECTED = "Not connected";
+static const char *NO_IP = "0.0.0.0";
 
 static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *notif_box = NULL;
-static lv_obj_t *print_box = NULL;
+static lv_obj_t *network_box = NULL;
 static lv_obj_t *menu = NULL;
 
 typedef struct {
@@ -171,12 +173,12 @@ static lv_obj_t *create_notif_box(lv_obj_t *container) {
 
     lv_obj_t *label = lv_label_create(box);
     lv_label_set_text_static(label, LV_SYMBOL_BELL);
-    lv_obj_set_style_pad_right(label, 5, 0);
+    lv_obj_set_style_pad_right(label, 7, 0);
 
     lv_obj_t *notif = lv_label_create(box);
     lv_label_set_text(notif, "No notifications");
     lv_label_set_long_mode(notif, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
-    lv_obj_set_width(notif, lv_pct(95));
+    lv_obj_set_width(notif, lv_pct(92));
 
     lv_obj_set_style_border_color(notif, lv_color_hex(0x8080ff), 0);
     lv_obj_set_style_border_width(notif, 2, 0);
@@ -185,34 +187,80 @@ static lv_obj_t *create_notif_box(lv_obj_t *container) {
     return box;
 }
 
-static lv_obj_t *create_print_box(lv_obj_t *container) {
+static lv_obj_t *create_network_box(lv_obj_t *container) {
     lv_obj_t *box = lv_obj_create(container);
     lv_obj_remove_style_all(box);
     lv_obj_set_size(box, lv_obj_get_width(container), LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(box, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_all(box, 5, 0);
+    lv_obj_set_style_pad_hor(box, 5, 0);
 
     lv_obj_t *label = lv_label_create(box);
     lv_label_set_text_static(label, LV_SYMBOL_WIFI);
-    lv_obj_set_style_pad_right(label, 5, 0);
+    lv_obj_set_style_pad_right(label, 2, 0);
 
-    lv_obj_t *txt = lv_label_create(box);
-    lv_label_set_text(txt, "Not connected");
-    lv_label_set_long_mode(txt, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
-    lv_obj_set_width(txt, lv_pct(95));
+    lv_obj_t *text_container = lv_obj_create(box);
+    lv_obj_remove_style_all(text_container);
+    lv_obj_set_size(text_container, lv_pct(92), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(text_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(text_container, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-    lv_obj_set_style_border_color(txt, lv_color_hex(0x80ff80), 0);
-    lv_obj_set_style_border_width(txt, 2, 0);
-    lv_obj_set_style_border_side(txt, LV_BORDER_SIDE_FULL, 0);
+    lv_obj_t *txt_network = lv_label_create(text_container);
+    lv_label_set_text(txt_network, NOT_CONNECTED);
+    lv_label_set_long_mode(txt_network, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_width(txt_network, lv_pct(100));
+    lv_obj_set_style_border_color(txt_network, lv_color_hex(0xff8080), 0);
+    lv_obj_set_style_border_width(txt_network, 2, 0);
+    lv_obj_set_style_border_side(txt_network, LV_BORDER_SIDE_FULL, 0);
+
+    lv_obj_t *txt_ip = lv_label_create(text_container);
+    lv_label_set_text(txt_ip, NO_IP);
+    lv_label_set_long_mode(txt_ip, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_width(txt_ip, lv_pct(100));
+    lv_obj_set_style_pad_top(txt_ip, 2, 0);
+    lv_obj_set_style_border_color(txt_ip, lv_color_hex(0xff8080), 0);
+    lv_obj_set_style_border_width(txt_ip, 2, 0);
+    lv_obj_set_style_border_side(txt_ip, LV_BORDER_SIDE_FULL, 0);
 
     return box;
 }
 
-void tardis_widget_set_network_info(network_event_t *e) {
-// TODO TODO TODO
+void tardis_widget_set_network_up_info(network_event_t *e) {
+    if (network_box && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
 
+        lv_obj_t *text_container = lv_obj_get_child(network_box, 1);
+
+        lv_obj_t *network_label = lv_obj_get_child(text_container, 0);
+        lv_label_set_text(network_label, e->ssid);
+
+        lv_obj_t *ip_label = lv_obj_get_child(text_container, 1);
+        lv_label_set_text(ip_label, e->ip);
+
+        lv_obj_set_style_border_color(network_label, lv_color_hex(0x80ff80), 0);
+        lv_obj_set_style_border_color(ip_label, lv_color_hex(0x80ff80), 0);
+
+        _lock_release(lvgl_lock);
+    }
+}
+
+void tardis_widget_set_network_down(void) {
+    if (network_box && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        lv_obj_t *text_container = lv_obj_get_child(network_box, 1);
+
+        lv_obj_t *network_label = lv_obj_get_child(text_container, 0);
+        lv_label_set_text(network_label, NOT_CONNECTED);
+
+        lv_obj_t *ip_label = lv_obj_get_child(text_container, 1);
+        lv_label_set_text(ip_label, NO_IP);
+
+        lv_obj_set_style_border_color(network_label, lv_color_hex(0xff8080), 0);
+        lv_obj_set_style_border_color(ip_label, lv_color_hex(0xff8080), 0);
+        _lock_release(lvgl_lock);
+    }
 }
 
 void tardis_widget_set_notif_txt(const char *notif) {
@@ -221,16 +269,6 @@ void tardis_widget_set_notif_txt(const char *notif) {
         // second child, based on cration order!!
         lv_obj_t *notif_label = lv_obj_get_child(notif_box, 1);
         lv_label_set_text_fmt(notif_label, "%s%s", notif, SEP);
-        _lock_release(lvgl_lock);
-    }
-}
-
-void tardis_widget_set_print_txt(const char *txt) {
-    if (print_box && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
-        // second child, based on cration order!!
-        lv_obj_t *txt_label = lv_obj_get_child(print_box, 1);
-        lv_label_set_text_fmt(txt_label, "%s%s", txt, SEP);
         _lock_release(lvgl_lock);
     }
 }
@@ -261,6 +299,8 @@ void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
             lv_obj_set_flex_grow(menu, 1);
             lv_obj_center(menu);
 
+            lv_obj_set_width(menu, lv_pct(100));
+
             // empty main page, set later once a node is detected
             lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
             lv_menu_set_page(menu, main_page);
@@ -268,8 +308,8 @@ void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
             lv_obj_set_user_data(menu, main_page);
         }
 
-        if (!print_box) {
-            print_box = create_print_box(col_box);
+        if (!network_box) {
+            network_box = create_network_box(col_box);
         }
 
         if (!notif_box) {
