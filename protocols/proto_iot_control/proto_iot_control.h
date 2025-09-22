@@ -97,6 +97,23 @@ typedef struct device_node_spec {
     action_t* actions;
 } device_t;
 
+#define UUID_SIZE 16
+
+typedef struct device_node {
+  uint8_t id[UUID_SIZE];
+  uint8_t* access_point;
+  uint16_t n_devices;
+  uint16_t* devices;
+  struct device_node* next;
+} device_node_t;
+
+typedef struct {
+    uint8_t id[UUID_SIZE];
+    uint16_t n_devices;
+    uint16_t *devices;
+} node_snapshot_t;
+
+
 typedef void* iot_node_handle_t;
 typedef signed char iot_device_handle_t;
 
@@ -112,6 +129,8 @@ extern "C" {
 void iot_control_protocol_init();
 
 device_t* get_device_info_data();
+int get_nodes_snapshot(node_snapshot_t **out_snapshot);
+iot_node_handle_t find_node_by_id(uint8_t *id);
 
 iot_node_handle_t initialize_node_iterator();
 iot_node_handle_t next_node(iot_node_handle_t node);

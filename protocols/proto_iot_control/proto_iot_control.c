@@ -1,6 +1,7 @@
 // proto_discovery.c
 #include "proto_iot_control.h"
 #include "event_dispatcher.h"
+#include "platform.h"
 #include "proto_manager.h"
 #include "comm_manager.h"
 #include "common_events.h"
@@ -15,14 +16,6 @@
 #define TAG "IoT Control Protocol"
 
 static SemaphoreHandle_t iot_control_protocol_mutex;
-
-typedef struct device_node {
-  uint8_t id[UUID_SIZE];
-  uint8_t* access_point;
-  uint16_t n_devices;
-  uint16_t* devices;
-  struct device_node* next;
-} device_node_t;
 
 static uint8_t id[UUID_SIZE];
 static QueueHandle_t iot_control_queue;
@@ -208,6 +201,12 @@ static void iot_control_protocol_task() {
           } else {
             LOG_INFO(TAG, "Could not sent the request to the candadiate.");
           }
+        
+            event_t *ui_refresh = create_event(EVENT_TYPE_REQUEST, REQUEST_REFRESH_MENU, NULL, 0);
+            if(ui_refresh) {
+
+            event_dispatcher_post(ui_refresh);
+            }
           
         } else if (event->subtype == NOTIFICATION_NEIGHBOR_DOWN) {
           bool removed = remove_participant(event);
@@ -496,7 +495,7 @@ parameter_t* generate_parameters_emoji() {
     free_parameters(master_parameter);
     return NULL;
   }
-
+/*
   previous_parameter = *parameter;  
   parameter = &((*parameter)->next);
   (*parameter) = initialize_parameter(EMOJI_SmallHeart, "SmallHeart", previous_parameter);
@@ -657,7 +656,7 @@ parameter_t* generate_parameters_emoji() {
     LOG_ERROR(TAG, "Failed to allocate memory for parameter");
     free_parameters(master_parameter);
     return NULL;
-  }
+  } */
 
   previous_parameter = *parameter;  
   parameter = &((*parameter)->next);
@@ -1269,4 +1268,70 @@ bool device_action(iot_node_handle_t node, iot_device_handle_t device, device_t*
   xSemaphoreGive(iot_control_protocol_mutex);
   LOG_INFO(TAG, "Not sent the request ");
   return false;
+}
+
+int get_nodes_snapshot(node_snapshot_t **out_snapshot) {
+    if (out_snapshot == NULL) return 0;
+    
+    xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+    
+    int count = 0;
+    device_node_t *node = peers;
+    if (node == NULL) {
+        xSemaphoreGive(iot_control_protocol_mutex);
+        LOG_ERROR(TAG, "snapshot: no peers at all :(");
+        return 0;
+    }
+    
+    do {
+        LOG_DEBUG(TAG, "snapshot: node id=%s, n_devices=%d", 
+                 uuid_to_string(node->id), node->n_devices);
+        count++;
+        node = node->next;
+    } while (node != NULL && node != peers);
+    
+    LOG_DEBUG(TAG, "snapshot: total count = %d", count);
+    
+    node_snapshot_t *snapshot = malloc(sizeof(node_snapshot_t) * count);
+    if (snapshot == NULL) {
+        xSemaphoreGive(iot_control_protocol_mutex);
+        return 0;
+    }
+    
+    int idx = 0;
+    node = peers;
+    do {
+        LOG_DEBUG(TAG, "snapshot: copying node %d", idx);
+        memcpy(snapshot[idx].id, node->id, UUID_SIZE);
+        snapshot[idx].n_devices = node->n_devices;
+        snapshot[idx].devices = malloc(sizeof(uint16_t) * node->n_devices);
+        if (snapshot[idx].devices && node->n_devices > 0) {
+            memcpy(snapshot[idx].devices, node->devices, sizeof(uint16_t) * node->n_devices);
+        }
+        idx++;
+        node = node->next;
+    } while (node != NULL && node != peers);
+    
+    xSemaphoreGive(iot_control_protocol_mutex);
+    
+    *out_snapshot = snapshot;
+    LOG_INFO(TAG, "snapshot: returning %d nodes", count);
+    return count;
+}
+
+iot_node_handle_t find_node_by_id(uint8_t *id) {
+    xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
+    
+    device_node_t *current = peers;
+    while (current != NULL) {
+        if (memcmp(current->id, id, UUID_SIZE) == 0) {
+            xSemaphoreGive(iot_control_protocol_mutex);
+            return (iot_node_handle_t)current;
+        }
+        current = current->next;
+        if (current == peers) break;
+    }
+    
+    xSemaphoreGive(iot_control_protocol_mutex);
+    return NULL;
 }
