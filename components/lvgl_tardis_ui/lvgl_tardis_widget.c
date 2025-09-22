@@ -23,6 +23,76 @@ typedef struct {
     parameter_t *parameter;
 } menu_item_context_t;
 
+static void apply_focus_style(lv_obj_t *obj, uint32_t color) {
+    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, LV_STATE_FOCUSED);
+    lv_obj_set_style_bg_color(obj, lv_palette_main(color), LV_STATE_FOCUSED);
+}
+
+#if M5STACK_CORE_BASIC
+static lv_group_t *input_group = NULL;
+
+static void menu_page_changed_cb(lv_event_t *e) {
+    lv_obj_t *menu_obj = lv_event_get_target(e);
+
+    if (input_group) {
+        lv_group_remove_all_objs(input_group);
+
+        lv_obj_t *back_btn = lv_menu_get_main_header_back_button(menu_obj);
+        if (back_btn) {
+            lv_group_add_obj(input_group, back_btn);
+            apply_focus_style(back_btn, LV_PALETTE_RED);
+        }
+
+        lv_obj_t *current_page = lv_menu_get_cur_main_page(menu_obj);
+        if (current_page) {
+            uint32_t child_count = lv_obj_get_child_count(current_page);
+            for (uint32_t i = 0; i < child_count; i++) {
+                lv_obj_t *cont = lv_obj_get_child(current_page, i);
+                lv_group_add_obj(input_group, cont);
+
+                lv_obj_add_flag(cont, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+            }
+        }
+    }
+}
+
+static lv_group_t *tardis_widget_init_input_group(void) {
+    lv_group_t *group = lv_group_create();
+    lv_group_set_default(group);
+
+    lv_group_set_wrap(group, true);
+
+    return group;
+}
+
+void tardis_widget_menu_next(void) {
+    if (input_group && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        lv_group_focus_next(input_group);
+        _lock_release(lvgl_lock);
+    }
+}
+
+void tardis_widget_menu_prev(void) {
+    if (input_group && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        lv_group_focus_prev(input_group);
+        _lock_release(lvgl_lock);
+    }
+}
+
+void tardis_widget_menu_select(void) {
+    if (input_group && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        lv_obj_t *focused = lv_group_get_focused(input_group);
+        if (focused) {
+            lv_obj_send_event(focused, LV_EVENT_CLICKED, NULL);
+        }
+        _lock_release(lvgl_lock);
+    }
+}
+#endif
+
 static void parameter_clicked(lv_event_t *e) {
     menu_item_context_t *ctx = (menu_item_context_t *)lv_event_get_user_data(e);
 
@@ -38,6 +108,7 @@ static void free_menu_context(lv_event_t *e) {
     menu_item_context_t *ctx = (menu_item_context_t *)lv_event_get_user_data(e);
     free(ctx);
 }
+
 static void create_action_subpage(lv_obj_t *menu, lv_obj_t *device_page,
                                   action_t *action, uint8_t *node_id,
                                   iot_device_handle_t device_index,
@@ -66,6 +137,8 @@ static void create_action_subpage(lv_obj_t *menu, lv_obj_t *device_page,
                                     ctx);
                 lv_obj_add_event_cb(cont, free_menu_context, LV_EVENT_DELETE,
                                     ctx);
+
+                apply_focus_style(cont, LV_PALETTE_BLUE);
             }
 
             current_param = current_param->next;
@@ -76,6 +149,8 @@ static void create_action_subpage(lv_obj_t *menu, lv_obj_t *device_page,
     lv_obj_t *label = lv_label_create(cont);
     lv_label_set_text(label, action->action_name);
     lv_menu_set_load_page_event(menu, cont, action_page);
+
+    apply_focus_style(cont, LV_PALETTE_BLUE);
 }
 
 static void create_device_subpage(lv_obj_t *menu, lv_obj_t *main_page,
@@ -98,6 +173,8 @@ static void create_device_subpage(lv_obj_t *menu, lv_obj_t *main_page,
     lv_obj_t *label = lv_label_create(cont);
     lv_label_set_text(label, dev->device_name);
     lv_menu_set_load_page_event(menu, cont, device_page);
+
+    apply_focus_style(cont, LV_PALETTE_BLUE);
 }
 
 static void create_node_subpage(lv_obj_t *menu, lv_obj_t *main_page,
@@ -109,7 +186,7 @@ static void create_node_subpage(lv_obj_t *menu, lv_obj_t *main_page,
         0) {
         sprintf(node_name, "ALL NODES");
     } else {
-        sprintf(node_name, "Node %.16s...", uuid_to_string(node_snap->id));
+        sprintf(node_name, "Node %.24s...", uuid_to_string(node_snap->id));
     }
 
     lv_obj_t *node_page = lv_menu_page_create(menu, node_name);
@@ -128,11 +205,19 @@ static void create_node_subpage(lv_obj_t *menu, lv_obj_t *main_page,
     lv_obj_t *label = lv_label_create(cont);
     lv_label_set_text(label, node_name);
     lv_menu_set_load_page_event(menu, cont, node_page);
+
+    apply_focus_style(cont, LV_PALETTE_BLUE);
 }
 
 lv_obj_t *populate_menu(lv_obj_t *menu, device_t *device_info,
                         node_snapshot_t *nodes, int node_count) {
     lv_obj_t *main_page = (lv_obj_t *)lv_obj_get_user_data(menu);
+
+#ifdef M5STACK_CORE_BASIC
+    if (input_group) {
+        lv_group_remove_all_objs(input_group);
+    }
+#endif
 
     lv_obj_clean(main_page);
 
@@ -152,6 +237,9 @@ void tardis_widget_populate_menu(void) {
         if (lvgl_lock) {
             _lock_acquire(lvgl_lock);
             populate_menu(menu, device_info, nodes, node_count);
+#ifdef M5STACK_CORE_BASIC
+            lv_obj_send_event(menu, LV_EVENT_VALUE_CHANGED, NULL);
+#endif
             _lock_release(lvgl_lock);
         }
 
@@ -306,6 +394,12 @@ void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
             lv_menu_set_page(menu, main_page);
 
             lv_obj_set_user_data(menu, main_page);
+
+#ifdef M5STACK_CORE_BASIC
+            input_group = tardis_widget_init_input_group();
+            lv_obj_add_event_cb(menu, menu_page_changed_cb,
+                                LV_EVENT_VALUE_CHANGED, NULL);
+#endif
         }
 
         if (!network_box) {
