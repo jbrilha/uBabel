@@ -1,4 +1,5 @@
 #include "ui_event_monitor.h"
+#include "ui_manager.h"
 
 #include "comm_manager.h"
 #include "common_events.h"
@@ -112,6 +113,8 @@ void ui_event_monitor_init(void) {
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST,
                               REQUEST_PRINT);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST, REQUEST_SHOW);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST,
+                              REQUEST_REFRESH_MENU);
 
     xTaskCreate(ui_event_monitor_task, "UI_EVENT_MONITOR_TASK",
                 UI_MONITOR_TASK_STACK_SIZE, NULL, UI_MONITOR_TASK_PRIORITY,
@@ -159,8 +162,6 @@ static void handle_ui_notif(event_t *e) {
     case NOTIFICATION_NEIGHBOR_UP: {
         char text[256];
         sprintf(text, "Neighbor up: %s", uuid_to_string((uint8_t *)e->payload));
-        LOG_ERROR(TAG, "%s", text);
-        puts(text);
         tardis_widget_set_notif_txt(text);
         break;
     }
@@ -186,7 +187,11 @@ static void handle_ui_request(event_t *e) {
         char text[256];
         memcpy(text, e->payload, strlen((char *)e->payload));
         puts(text);
-        messenger_widget_set_txt(text);
+        tardis_widget_set_print_txt(text);
+    }
+    case REQUEST_REFRESH_MENU: {
+        tardis_widget_populate_menu();
+        break;
     }
     default:
         break;

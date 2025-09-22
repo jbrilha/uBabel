@@ -1,7 +1,6 @@
 #include "ui_manager.h"
 
-#include "lvgl_flex_layout.h"
-#include "lvgl_messenger_widget.h"
+#include "lvgl_tardis_widget.h"
 #include "lvgl_ui.h"
 #include "misc/lv_types.h"
 #include "spi_lcd_touch.h"
@@ -77,6 +76,8 @@ void ui_manager_set_messenger_widget() {
                                          true, true);
 }
 
+static bool tardis_initialized = false;
+
 void ui_manager_set_tardis_widget() {
     lv_display_t *display;
     _lock_t *lvgl_lock;
@@ -87,4 +88,13 @@ void ui_manager_set_tardis_widget() {
     }
 
     tardis_widget_init(display, lvgl_lock);
+
+    tardis_initialized = true;
+}
+
+void ui_manager_update_tardis_widget() {
+    if (!tardis_initialized)
+        return;
+
+    tardis_widget_populate_menu();
 }
