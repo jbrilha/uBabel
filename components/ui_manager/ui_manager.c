@@ -98,3 +98,16 @@ void ui_manager_update_tardis_widget() {
 
     tardis_widget_populate_menu();
 }
+
+void ui_manager_set_camera_widget() {
+    lv_display_t *display;
+    _lock_t *lvgl_lock;
+
+    if ((display = spi_lcd_get_display()) == NULL ||
+        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+        return;
+    }
+
+    camera_widget_init(display, lvgl_lock);
+}
+

@@ -1,4 +1,5 @@
 set(COMP_SRCS 
+    lvgl_camera_widget.c
     lvgl_flex_layout.c
     lvgl_temperature_widget.c
     lvgl_messenger_widget.c

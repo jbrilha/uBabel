@@ -22,6 +22,8 @@
 #include "proto_iot_control.h"
 #include "proto_simple_overlay.h"
 
+
+#include "camera.h"
 #include "bmp280.h"
 #include "dht11.h"
 #include "lcd16x2.h"
@@ -34,8 +36,6 @@ static const char *TAG = "M5_MAIN";
 void init_peripherals(void) {
     spi_manager_init();
     ui_manager_init();
-
-    ui_manager_set_tardis_widget();
 
     // i2c_init_default();
 
@@ -57,6 +57,10 @@ void app_main(void) {
     event_dispatcher_init();
     comm_manager_init();
     init_peripherals();
+
+    // this provides a live feed @ ~25 FPS
+    ui_manager_set_camera_widget();
+    run_camera_task();
 
     xTaskCreate(network_manager_task, // Task function
                 "NetworkManager",     // Task name
