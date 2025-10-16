@@ -15,8 +15,9 @@ cd esp-idf
 
 . ./export.sh
 
-# recommended
+# RECOMMENDED
 echo "alias get_idf='. $HOME/esp/esp-idf/export.sh'" >> ~/.bashrc
+# you MUST do this every time you open a terminal session to build for the ESPs otherwise the Makefile will NOT work
 ```
 
 ### PICO-SDK
