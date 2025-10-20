@@ -31,7 +31,7 @@
 #include "paj7620.h"
 #include "tca9548.h"
 
-static const char *TAG = "M5_MAIN";
+static const char *TAG = "ESP32_MAIN";
 
 void init_peripherals(void) {
     spi_manager_init();
