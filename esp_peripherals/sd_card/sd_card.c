@@ -10,6 +10,7 @@
 
 // https://github.com/espressif/esp-idf/tree/master/examples/storage/sd_card/sdspi
 
+#include "driver/sdmmc_host.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_vfs_fat.h"
@@ -20,6 +21,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/unistd.h>
+#include <unistd.h>
 
 #include "sd_card.h"
 
@@ -31,29 +33,137 @@
 
 static const char *TAG = "SD Card";
 
-#define MOUNT_POINT "/sdcard"
-
-#define SD_CS_PIN 1
-
 static bool sd_card_mounted = false;
 static sdmmc_card_t *card = NULL;
 
 bool is_sd_card_mounted(void) { return sd_card_mounted; }
 
-esp_err_t write_to_file(const char *file_name, const char *data) {
+static esp_vfs_fat_sdmmc_mount_config_t init_mount_config(void) {
+    // if format_if_mount_failed is set to true, the SD card will be partitioned
+    // and formatted in case mounting fails, probably not recommended :P
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024};
+
+    return mount_config;
+}
+
+static esp_err_t
+mount_sdmmc_card(esp_vfs_fat_sdmmc_mount_config_t *mount_config,
+                 sdmmc_host_t *host, sdmmc_slot_config_t *slot_config) {
+    esp_err_t ret;
+
+    ESP_LOGI(TAG, "mounting FAT filesystem");
+    ret = esp_vfs_fat_sdmmc_mount(MOUNT_POINT, host, slot_config, mount_config,
+                                  &card);
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "failed to mount filesystem");
+        } else {
+            ESP_LOGE(TAG, "failed to initialize the card: %s",
+                     esp_err_to_name(ret));
+        }
+
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "filesystem mounted");
+    sd_card_mounted = true;
+
+    sdmmc_card_print_info(stdout, card);
+
+    return ret;
+}
+
+esp_err_t mount_sdmmc_card_1w(int clk_pin, int cmd_pin, int d0_pin) {
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = init_mount_config();
+    ESP_LOGI(TAG, "initializing SD card as an SDMMC peripheral");
+
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    // optional, default is 20KHz, high speed is 40KHz
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.width = 1;
+    slot_config.clk = clk_pin;
+    slot_config.cmd = cmd_pin;
+    slot_config.d0 = d0_pin;
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+    return mount_sdmmc_card(&mount_config, &host, &slot_config);
+}
+
+esp_err_t mount_sdmmc_card_4w(int clk_pin, int cmd_pin, int d0_pin, int d1_pin,
+                              int d2_pin, int d3_pin) {
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = init_mount_config();
+    ESP_LOGI(TAG, "initializing SD card as an SDMMC peripheral");
+
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    // optional, default is 20KHz, high speed is 40KHz
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.width = 4;
+    slot_config.clk = clk_pin;
+    slot_config.cmd = cmd_pin;
+    slot_config.d0 = d0_pin;
+    slot_config.d1 = d1_pin;
+    slot_config.d2 = d2_pin;
+    slot_config.d3 = d3_pin;
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+    return mount_sdmmc_card(&mount_config, &host, &slot_config);
+}
+
+esp_err_t mount_sdspi_card(int cs_pin) {
+    esp_err_t ret;
+
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = init_mount_config();
+    ESP_LOGI(TAG, "initializing SD card as an SPI peripheral");
+
+    // SPI bus init is handled by the spi manager
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.gpio_cs = cs_pin;
+    slot_config.host_id = host.slot;
+
+    ESP_LOGI(TAG, "mounting FAT filesystem");
+    ret = esp_vfs_fat_sdspi_mount(MOUNT_POINT, &host, &slot_config,
+                                  &mount_config, &card);
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "failed to mount filesystem");
+        } else {
+            ESP_LOGE(TAG, "failed to initialize the card: %s",
+                     esp_err_to_name(ret));
+        }
+
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "filesystem mounted");
+    sd_card_mounted = true;
+
+    sdmmc_card_print_info(stdout, card);
+
+    return ret;
+}
+
+esp_err_t write_to_file(const char *file_path, const char *data) {
     if (!sd_card_mounted) {
         ESP_LOGE(TAG, "SD card not mounted, aborting operation");
         return ESP_FAIL;
     }
 
-    char path[MAX_PATH_SIZE];
-    snprintf(path, MAX_PATH_SIZE, "%s/%s", MOUNT_POINT, file_name);
+    ESP_LOGI(TAG, "opening file %s for writing", file_path);
 
-    ESP_LOGI(TAG, "opening file %s for writing", file_name);
-
-    FILE *f = fopen(path, "w");
+    FILE *f = fopen(file_path, "w");
     if (f == NULL) {
-        ESP_LOGE(TAG, "failed to open file %s for writing", file_name);
+        ESP_LOGE(TAG, "failed to open file %s for writing", file_path);
         return ESP_FAIL;
     }
 
@@ -65,19 +175,16 @@ esp_err_t write_to_file(const char *file_name, const char *data) {
     return ESP_OK;
 }
 
-esp_err_t read_file(const char *file_name) {
+esp_err_t read_file(const char *file_path) {
     if (!sd_card_mounted) {
         ESP_LOGE(TAG, "SD card not mounted, aborting operation");
         return ESP_FAIL;
     }
 
-    char path[MAX_PATH_SIZE];
-    snprintf(path, MAX_PATH_SIZE, "%s/%s", MOUNT_POINT, file_name);
-
-    ESP_LOGI(TAG, "reading from file %s", file_name);
-    FILE *f = fopen(path, "r");
+    ESP_LOGI(TAG, "reading from file %s", file_path);
+    FILE *f = fopen(file_path, "r");
     if (f == NULL) {
-        ESP_LOGE(TAG, "failed to open file %s for reading", file_name);
+        ESP_LOGE(TAG, "failed to open file %s for reading", file_path);
         return ESP_FAIL;
     }
     char line[MAX_CHAR_SIZE];
@@ -94,20 +201,17 @@ esp_err_t read_file(const char *file_name) {
     return ESP_OK;
 }
 
-esp_err_t read_dir_contents(const char *dir_name) {
+esp_err_t read_dir_contents(const char *dir_path) {
     if (!sd_card_mounted) {
         ESP_LOGE(TAG, "SD card not mounted, aborting operation");
         return ESP_FAIL;
     }
 
-    char path[MAX_PATH_SIZE];
-    snprintf(path, MAX_PATH_SIZE, "%s/%s", MOUNT_POINT, dir_name);
+    ESP_LOGI(TAG, "listing files in directory %s", dir_path);
 
-    ESP_LOGI(TAG, "listing files in directory %s", dir_name);
-
-    DIR *dir = opendir(path);
+    DIR *dir = opendir(dir_path);
     if (dir == NULL) {
-        ESP_LOGE(TAG, "failed to open directory %s", dir_name);
+        ESP_LOGE(TAG, "failed to open directory %s", dir_path);
         return ESP_FAIL;
     }
 
@@ -211,47 +315,6 @@ esp_err_t load_and_display_image(const char *filepath) {
     return ret;
 }
 
-esp_err_t mount_sd_card(void) {
-    esp_err_t ret;
-
-    // if format_if_mount_failed is set to true, the SD card will be partitioned
-    // and formatted in case mounting fails, probably not recommended :P
-    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024};
-    ESP_LOGI(TAG, "initializing SD card as an SPI peripheral");
-
-    // SPI bus init is handled by the spi manager
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = SD_CS_PIN;
-    slot_config.host_id = host.slot;
-
-    ESP_LOGI(TAG, "mounting FAT filesystem");
-    ret = esp_vfs_fat_sdspi_mount(MOUNT_POINT, &host, &slot_config,
-                                  &mount_config, &card);
-
-    if (ret != ESP_OK) {
-        if (ret == ESP_FAIL) {
-            ESP_LOGE(TAG, "failed to mount filesystem");
-        } else {
-            ESP_LOGE(TAG, "failed to initialize the card: %s",
-                     esp_err_to_name(ret));
-        }
-
-        return ret;
-    }
-
-    ESP_LOGI(TAG, "filesystem mounted");
-    sd_card_mounted = true;
-
-    sdmmc_card_print_info(stdout, card);
-
-    return ret;
-}
-
 void unmount_sd_card(void) {
     esp_vfs_fat_sdcard_unmount(MOUNT_POINT, card);
     sd_card_mounted = false;
@@ -273,7 +336,7 @@ esp_err_t format_sd_card(void) {
 void sd_card_task(void *params) {
     esp_err_t ret;
 
-    const char *file_foo = "/foo.txt";
+    const char *file_foo = MOUNT_POINT "/foo.txt";
     char data[MAX_CHAR_SIZE];
     snprintf(data, MAX_CHAR_SIZE, "%s %s!\n", "FOOOOOOOOO", card->cid.name);
     ret = write_to_file(file_foo, data);
@@ -283,7 +346,7 @@ void sd_card_task(void *params) {
         return;
     }
 
-    const char *file_bar = "/bar.txt";
+    const char *file_bar = MOUNT_POINT "/bar.txt";
 
     // check if bar file exists before renaming
     struct stat st;
@@ -306,7 +369,7 @@ void sd_card_task(void *params) {
         return;
     }
 
-    const char *dir_name = "/";
+    const char *dir_name = MOUNT_POINT;
     ret = read_dir_contents(dir_name);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "dir content read failed");
