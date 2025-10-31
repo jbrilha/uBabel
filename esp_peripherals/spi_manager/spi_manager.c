@@ -21,9 +21,9 @@ static const char *TAG = "SPI_MANAGER";
 #define SCLK_PIN 18
 #define MOSI_PIN 19
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#define MISO_PIN 13
-#define SCLK_PIN 12
-#define MOSI_PIN 11
+#define MISO_PIN 40
+#define SCLK_PIN 41
+#define MOSI_PIN 42
 #endif
 
 static bool spi_initialized = false;

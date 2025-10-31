@@ -84,15 +84,12 @@ static const char *TAG = "SPI_LCD_TOUCH";
 
 #define TOUCH_CS_PIN 15
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
-#define LCD_CS_PIN 10
-#define LCD_RST_PIN 7
-#define LCD_DC_PIN 6
-#define LCD_BL_PIN 5
+#define LCD_CS_PIN 2
+#define LCD_RST_PIN 39
+#define LCD_DC_PIN 38
+#define LCD_BL_PIN 14
 
-#define TOUCH_MOSI_PIN 39
-#define TOUCH_CLK_PIN 38
-#define TOUCH_MISO_PIN 40
-#define TOUCH_CS_PIN 8
+#define TOUCH_CS_PIN 48
 #endif
 
 // Bit number used to represent command and parameter
