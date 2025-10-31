@@ -167,7 +167,7 @@ esp_err_t write_to_file(const char *file_path, const char *data) {
         return ESP_FAIL;
     }
 
-    fprintf(f, data);
+    fprintf(f, "%s", data);
     fclose(f);
 
     ESP_LOGI(TAG, "data successfully written to file");
