@@ -27,11 +27,33 @@ device_t* get_device_info_data() {
   return device_info;
 }
 
+static device_node_t* find_participant(int8_t* id) {
+  device_node_t* current = peers;
+  while(current != NULL) {
+    if(memcmp(current->id, id, UUID_SIZE) == 0) {
+      return current;
+    }
+    current = current->next;
+  }
+
+  return NULL;
+}
+
 static device_node_t* register_new_participant(event_t* neighbor_up_event) {
-  device_node_t* node = (device_node_t*) malloc(sizeof(device_node_t));
+  uint8_t *participant_id = (uint8_t*) neighbor_up_event->payload;
+
+  device_node_t* node = find_participant((int8_t*)participant_id);
+  if(node != NULL) {
+    LOG_ERROR(TAG, "Node %s already exists (skipping registration), via=%s", 
+             uuid_to_string(participant_id), 
+             node->access_point ? uuid_to_string(node->access_point) : "DIRECT");
+    return node;
+  }
+
+  node = (device_node_t*) malloc(sizeof(device_node_t));
 
   if(node != NULL) {
-    memcpy(node->id, (uint8_t*) neighbor_up_event->payload, UUID_SIZE);
+    memcpy(node->id, participant_id, UUID_SIZE);
     node->access_point = NULL;
     node->n_devices = 0;
     node->devices = NULL;
@@ -43,7 +65,15 @@ static device_node_t* register_new_participant(event_t* neighbor_up_event) {
 } 
 
 static device_node_t* register_new_indirect_participant(uint8_t* participant_id, uint8_t* access_point) {
-  device_node_t* node = (device_node_t*) malloc(sizeof(device_node_t));
+  device_node_t* node = find_participant((int8_t*)participant_id);
+  if(node != NULL) {
+    LOG_ERROR(TAG, "Node %s already exists (skipping indirect registration), via=%s", 
+             uuid_to_string(participant_id), 
+             node->access_point ? uuid_to_string(node->access_point) : "DIRECT");
+    return node;
+  }
+
+  node = (device_node_t*) malloc(sizeof(device_node_t));
 
   if(node != NULL) {
     memcpy(node->id, participant_id, UUID_SIZE);
@@ -61,19 +91,6 @@ static device_node_t* register_new_indirect_participant(uint8_t* participant_id,
   } 
 
   return node;
-}
-
-static device_node_t* find_participant(int8_t* id) {
-  device_node_t* current = peers;
-  while(current != NULL) {
-    if(memcmp(current->id, id, UUID_SIZE) == 0) {
-      xSemaphoreGive(iot_control_protocol_mutex);
-      return current;
-    }
-    current = current->next;
-  }
-
-  return NULL;
 }
 
 static void update_node_devices(message_t* update_message) {
@@ -148,7 +165,7 @@ static bool remove_participant(event_t* neighbor_down_event) {
     current = &peers;
     while(*current != NULL) {
       if((*current)->access_point != NULL && memcmp((*current)->access_point, rem->id, UUID_SIZE) == 0) {
-        if( (*current)->n_devices < 0 && (*current)->devices != NULL )
+        if((*current)->devices != NULL )
           free((*current)->devices);
         
         device_node_t* drop = (*current);
@@ -180,8 +197,6 @@ static void send_init_request(device_node_t* d) {
 }
 
 static void iot_control_protocol_task() {
-  iot_control_protocol_mutex = xSemaphoreCreateMutex();
-
   event_t *event;
 
   while (true)
@@ -194,7 +209,11 @@ static void iot_control_protocol_task() {
         if (event->subtype == NOTIFICATION_NEIGHBOR_UP)
         {
           LOG_INFO(TAG, "Neighbor up notification for %s, will register the participant.", uuid_to_string(event->payload));
+
+          xSemaphoreTake(iot_control_protocol_mutex, portMAX_DELAY);
           device_node_t* d = register_new_participant(event);
+          xSemaphoreGive(iot_control_protocol_mutex);
+
           if(d != NULL) {
             LOG_INFO(TAG, "Sending the init request to the new candidate");
             send_init_request(d);
@@ -202,16 +221,21 @@ static void iot_control_protocol_task() {
             LOG_INFO(TAG, "Could not sent the request to the candadiate.");
           }
         
-            event_t *ui_refresh = create_event(EVENT_TYPE_REQUEST, REQUEST_REFRESH_MENU, NULL, 0);
-            if(ui_refresh) {
-
+          event_t *ui_refresh = create_event(EVENT_TYPE_REQUEST, REQUEST_REFRESH_MENU, NULL, 0);
+          if(ui_refresh) {
             event_dispatcher_post(ui_refresh);
-            }
+          }
           
         } else if (event->subtype == NOTIFICATION_NEIGHBOR_DOWN) {
           bool removed = remove_participant(event);
           if(removed)
             LOG_INFO(TAG, "Removed node device with id %s", uuid_to_string(event->payload));
+
+          event_t *ui_refresh = create_event(EVENT_TYPE_REQUEST, REQUEST_REFRESH_MENU, NULL, 0);
+          if(ui_refresh) {
+            event_dispatcher_post(ui_refresh);
+          }
+
           else
             LOG_INFO(TAG, "Failed to remove device node with id %s", uuid_to_string(event->payload)); 
         } 
@@ -912,6 +936,7 @@ device_t*  initialize_device_type_lcd_display(uint8_t type, const char* name) {
 
 void iot_control_protocol_init() {
   get_local_identifier(id);
+  iot_control_protocol_mutex = xSemaphoreCreateMutex();
 
   LOG_INFO(TAG, "Initializing iot control protocol with id %s", uuid_to_string(id));
   
@@ -1279,7 +1304,7 @@ int get_nodes_snapshot(node_snapshot_t **out_snapshot) {
     device_node_t *node = peers;
     if (node == NULL) {
         xSemaphoreGive(iot_control_protocol_mutex);
-        LOG_ERROR(TAG, "snapshot: no peers at all :(");
+        LOG_WARN(TAG, "snapshot: no peers at all");
         return 0;
     }
     
@@ -1312,9 +1337,8 @@ int get_nodes_snapshot(node_snapshot_t **out_snapshot) {
         node = node->next;
     } while (node != NULL && node != peers);
     
-    xSemaphoreGive(iot_control_protocol_mutex);
-    
     *out_snapshot = snapshot;
+    xSemaphoreGive(iot_control_protocol_mutex);
     LOG_INFO(TAG, "snapshot: returning %d nodes", count);
     return count;
 }
