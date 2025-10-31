@@ -24,10 +24,13 @@ void button_init(int pin) {
     gpio_set_pin_dir(pin, GPIO_INPUT);
 }
 
-void buttons_task(void *params) {
-    button_init(PIN_A);
-    button_init(PIN_B);
-    button_init(PIN_C);
+void m5_buttons_init() {
+    button_init(M5_PIN_A);
+    button_init(M5_PIN_B);
+    button_init(M5_PIN_C);
+}
+
+void m5_buttons_task(void *params) {
     int state;
 
     while (1) {
@@ -51,6 +54,6 @@ void buttons_task(void *params) {
 }
 
 void run_m5_buttons_task(void) {
-    xTaskCreate(buttons_task, M5_BUTTON_TASK_NAME, M5_BUTTON_TASK_STACK_SIZE,
+    xTaskCreate(m5_buttons_task, M5_BUTTON_TASK_NAME, M5_BUTTON_TASK_STACK_SIZE,
                 NULL, M5_BUTTON_TASK_PRIORITY, NULL);
 }

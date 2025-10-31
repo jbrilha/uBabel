@@ -41,6 +41,8 @@ void init_peripherals(void) {
     spi_manager_init();
     ui_manager_init();
 
+    m5_buttons_init();
+
 #if M5STACK_RECEIVER
     esp_lora_init();
 
