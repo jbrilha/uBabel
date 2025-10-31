@@ -14,11 +14,12 @@ static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *notif_box = NULL;
 static lv_obj_t *network_box = NULL;
 static lv_obj_t *menu = NULL;
+static uint8_t selected_node_id[UUID_SIZE] = {0};
+static lv_obj_t *shared_device_page = NULL;
 
 typedef struct {
-    uint8_t node_id[UUID_SIZE];
     iot_device_handle_t device_index;
-    device_t *device_spec;
+    device_t *device;
     action_t *action;
     parameter_t *parameter;
 } menu_item_context_t;
@@ -95,11 +96,10 @@ void tardis_widget_menu_select(void) {
 
 static void parameter_clicked(lv_event_t *e) {
     menu_item_context_t *ctx = (menu_item_context_t *)lv_event_get_user_data(e);
-
-    iot_node_handle_t node = find_node_by_id(ctx->node_id);
+    iot_node_handle_t node = find_node_by_id(selected_node_id);
 
     if (node != NULL) {
-        device_action(node, ctx->device_index, ctx->device_spec, ctx->action,
+        device_action(node, ctx->device_index, ctx->device, ctx->action,
                       ctx->parameter);
     }
 }
@@ -110,11 +110,14 @@ static void free_menu_context(lv_event_t *e) {
 }
 
 static void create_action_subpage(lv_obj_t *menu, lv_obj_t *device_page,
-                                  action_t *action, uint8_t *node_id,
+                                  action_t *action,
                                   iot_device_handle_t device_index,
-                                  device_t *device_spec) {
+                                  device_t *dev) {
 
-    lv_obj_t *action_page = lv_menu_page_create(menu, action->action_name);
+    char page_title[64];
+    snprintf(page_title, sizeof(page_title), "%s parameters",
+             action->action_name);
+    lv_obj_t *action_page = lv_menu_page_create(menu, page_title);
 
     parameter_t *current_param = action->parameters;
     if (current_param != NULL) {
@@ -127,9 +130,8 @@ static void create_action_subpage(lv_obj_t *menu, lv_obj_t *device_page,
 
             menu_item_context_t *ctx = malloc(sizeof(menu_item_context_t));
             if (ctx != NULL) {
-                memcpy(ctx->node_id, node_id, UUID_SIZE);
                 ctx->device_index = device_index;
-                ctx->device_spec = device_spec;
+                ctx->device = dev;
                 ctx->action = action;
                 ctx->parameter = current_param;
 
@@ -154,16 +156,18 @@ static void create_action_subpage(lv_obj_t *menu, lv_obj_t *device_page,
 }
 
 static void create_device_subpage(lv_obj_t *menu, lv_obj_t *main_page,
-                                  device_t *dev, uint8_t *node_id,
+                                  device_t *dev,
                                   iot_device_handle_t device_index) {
 
-    lv_obj_t *device_page = lv_menu_page_create(menu, dev->device_name);
+    char page_title[64];
+    snprintf(page_title, sizeof(page_title), "%s actions", dev->device_name);
+    lv_obj_t *device_page = lv_menu_page_create(menu, page_title);
 
     action_t *current_action = dev->actions;
     if (current_action != NULL) {
         action_t *first_action = current_action;
         do {
-            create_action_subpage(menu, device_page, current_action, node_id,
+            create_action_subpage(menu, device_page, current_action,
                                   device_index, dev);
             current_action = current_action->next;
         } while (current_action != NULL && current_action != first_action);
@@ -177,10 +181,32 @@ static void create_device_subpage(lv_obj_t *menu, lv_obj_t *main_page,
     apply_focus_style(cont, LV_PALETTE_BLUE);
 }
 
-static void create_node_subpage(lv_obj_t *menu, lv_obj_t *main_page,
-                                node_snapshot_t *node_snap,
-                                device_t *device_info) {
+// creating an actual subpage for each node was using too much LVGL mem so
+// everything froze so we're using the same shared device page
+static void create_shared_device_page(lv_obj_t *menu, device_t *device_info) {
+    if (shared_device_page != NULL || device_info == NULL) {
+        return;
+    }
 
+    shared_device_page = lv_menu_page_create(menu, "Devices");
+
+    device_t *current_device = device_info;
+    device_t *first_device = device_info;
+    do {
+        if (current_device == NULL)
+            break;
+        create_device_subpage(menu, shared_device_page, current_device, 0);
+        current_device = current_device->next;
+    } while (current_device != NULL && current_device != first_device);
+}
+
+static void node_clicked(lv_event_t *e) {
+    uint8_t *node_id = (uint8_t *)lv_event_get_user_data(e);
+    memcpy(selected_node_id, node_id, UUID_SIZE);
+}
+
+static void create_node_content(lv_obj_t *menu, lv_obj_t *main_page,
+                                node_snapshot_t *node_snap) {
     char node_name[64];
     if (memcmp(node_snap->id, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", UUID_SIZE) ==
         0) {
@@ -189,24 +215,21 @@ static void create_node_subpage(lv_obj_t *menu, lv_obj_t *main_page,
         sprintf(node_name, "Node %.24s...", uuid_to_string(node_snap->id));
     }
 
-    lv_obj_t *node_page = lv_menu_page_create(menu, node_name);
+    uint8_t *node_id = malloc(UUID_SIZE);
+    if (node_id) {
+        memcpy(node_id, node_snap->id, UUID_SIZE);
 
-    device_t *current_device = device_info;
-    device_t *first_device = device_info;
-    do {
-        if (current_device == NULL)
-            break;
-        create_device_subpage(menu, node_page, current_device, node_snap->id,
-                              0);
-        current_device = current_device->next;
-    } while (current_device != NULL && current_device != first_device);
+        lv_obj_t *cont = lv_menu_cont_create(main_page);
+        lv_obj_t *label = lv_label_create(cont);
+        lv_label_set_text(label, node_name);
 
-    lv_obj_t *cont = lv_menu_cont_create(main_page);
-    lv_obj_t *label = lv_label_create(cont);
-    lv_label_set_text(label, node_name);
-    lv_menu_set_load_page_event(menu, cont, node_page);
+        lv_obj_add_event_cb(cont, node_clicked, LV_EVENT_CLICKED, node_id);
+        lv_obj_add_event_cb(cont, free_menu_context, LV_EVENT_DELETE, node_id);
 
-    apply_focus_style(cont, LV_PALETTE_BLUE);
+        lv_menu_set_load_page_event(menu, cont, shared_device_page);
+
+        apply_focus_style(cont, LV_PALETTE_BLUE);
+    }
 }
 
 lv_obj_t *populate_menu(lv_obj_t *menu, device_t *device_info,
@@ -219,10 +242,12 @@ lv_obj_t *populate_menu(lv_obj_t *menu, device_t *device_info,
     }
 #endif
 
+    create_shared_device_page(menu, device_info);
+
     lv_obj_clean(main_page);
 
     for (int i = 0; i < node_count; i++) {
-        create_node_subpage(menu, main_page, &nodes[i], device_info);
+        create_node_content(menu, main_page, &nodes[i]);
     }
 
     return menu;
@@ -354,7 +379,7 @@ void tardis_widget_set_network_down(void) {
 void tardis_widget_set_notif_txt(const char *notif) {
     if (notif_box && lvgl_lock) {
         _lock_acquire(lvgl_lock);
-        // second child, based on cration order!!
+        // second child, based on creation order!!
         lv_obj_t *notif_label = lv_obj_get_child(notif_box, 1);
         lv_label_set_text_fmt(notif_label, "%s%s", notif, SEP);
         _lock_release(lvgl_lock);

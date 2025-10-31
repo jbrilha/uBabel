@@ -204,7 +204,7 @@ static void handle_ui_request(event_t *e) {
         char text[256];
         memcpy(text, e->payload, strlen((char *)e->payload));
         puts(text);
-        // tardis_widget_set_print_txt(text);
+        tardis_widget_set_notif_txt(text);
     }
     case REQUEST_REFRESH_MENU: {
         tardis_widget_populate_menu();
