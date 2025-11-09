@@ -1,0 +1,8 @@
+if(DEFINED BUILD_PICO)
+    include(lora.cmake)
+else()
+idf_component_register(SRCS "lora.c"
+                        INCLUDE_DIRS "."
+                        PRIV_REQUIRES spi_hal gpio_hal
+)
+endif()
