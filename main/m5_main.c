@@ -17,7 +17,7 @@
 #include "esp_lora.h"
 #include "i2c_hal.h"
 #include "platform.h"
-#include "spi_manager.h"
+#include "spi_hal.h"
 #include "ui_manager.h"
 
 #include "comm_manager.h"
@@ -38,7 +38,7 @@
 static const char *TAG = "M5_MAIN";
 
 void init_peripherals(void) {
-    spi_manager_init();
+    spi_hal_master_init();
     ui_manager_init();
 
     m5_buttons_init();

@@ -28,6 +28,7 @@ if(DEFINED BUILD_PICO)
         gpio_hal
         adc_hal
         i2c_hal
+        spi_hal
         dht11
         loudness_sensor
         tca9548

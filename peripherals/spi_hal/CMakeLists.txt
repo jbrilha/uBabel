@@ -1,0 +1,8 @@
+if(DEFINED BUILD_PICO)
+    include(spi_hal.cmake)
+else()
+    idf_component_register(SRCS spi_hal.c
+                            INCLUDE_DIRS "." "../../shared"
+                            REQUIRES esp_timer driver gpio_hal
+    )
+endif()

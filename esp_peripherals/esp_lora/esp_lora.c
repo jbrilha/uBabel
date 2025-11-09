@@ -6,7 +6,7 @@
 #include <driver/spi_common.h>
 #include <driver/spi_master.h>
 
-#include "spi_manager.h"
+#include "spi_hal.h"
 
 #include "esp_lora.h"
 #include "esp_lora_receiver.h"
@@ -69,7 +69,7 @@ spi_device_handle_t setup_spi_device() {
                                              .address_bits = 8,
                                              .dummy_bits = 0,
                                              .mode = 0};
-    return spi_manager_add_device(&dev_cfg);
+    return spi_hal_add_device(&dev_cfg);
 }
 
 void setup_sx127x() {
@@ -140,6 +140,7 @@ static void esp_lora_sender_task(void *pvParameters) {
 bool esp_lora_start_sender() {
     ESP_LOGI(TAG, "initializing sender");
     if (!lora_initialized) {
+        esp_lora_init();
         lora_initialized = true;
     }
     ESP_LOGI(TAG, "sender initialized");

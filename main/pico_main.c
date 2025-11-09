@@ -9,6 +9,7 @@
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
 
+#include "spi_hal.h"
 #include "platform.h"
 
 #include "comm_manager.h"
@@ -24,6 +25,7 @@
 
 #include "proto_iot_control.h"
 #include "app.h"
+#include "spi_hal/spi_hal.h"
 
 static const char *TAG = "PICO_MAIN";
 
@@ -58,6 +60,8 @@ void main_task(__unused void *params) {
     start_unicorn_task();
     start_scroll_task();
     start_buttons_task();
+
+    spi_hal_master_init();
 
     xTaskCreate(network_manager_task, // Task function
                 "NetworkManager",     // Task name

@@ -1,6 +1,7 @@
 add_subdirectory(gpio_hal)
 add_subdirectory(adc_hal)
 add_subdirectory(i2c_hal)
+add_subdirectory(spi_hal)
 add_subdirectory(dht11)
 add_subdirectory(tca9548)
 add_subdirectory(mma7660)
