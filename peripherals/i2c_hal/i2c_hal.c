@@ -1,6 +1,7 @@
 #include "i2c_hal.h"
 
 #include "platform.h"
+#include <string.h>
 
 #if BUILD_ESP32
 
