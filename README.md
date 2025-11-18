@@ -5,7 +5,7 @@
 ### ESP-IDF
 
 ``` bash
-mkdir -p esp
+mkdir -p ~/esp
 cd ~/esp
 
 git clone -b v5.5 --depth=1 --recursive https://github.com/espressif/esp-idf.git
