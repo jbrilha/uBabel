@@ -119,7 +119,7 @@ void network_platform_enable_ap_mode(const char *ssid, const char *password) {
 
 int network_platform_connect_wifi(const char *ssid, const char *password,
                                   int timeout_ms) {
-
+    int auth;
     bool open = !(password && strlen(password));
 #ifdef BUILD_PICO
     auth = open ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
@@ -144,11 +144,7 @@ int network_platform_connect_wifi(const char *ssid, const char *password,
     wifi_config.sta.pmf_cfg.required = false;
 
     // Ensure STA netif exists and WiFi is in STA mode + started
-    if (!esp_netif_sta) {
-        esp_netif_sta = esp_netif_create_default_wifi_sta();
-    }
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    network_platform_enable_sta_mode();
 
     // Clear previous bits from any past attempt
     xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
