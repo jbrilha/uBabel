@@ -10,14 +10,29 @@ static esp_netif_t *esp_netif_sta = NULL;
 static esp_netif_t *esp_netif_ap = NULL;
 static scan_callback_t esp32_scan_callback = NULL;
 
+static EventGroupHandle_t s_wifi_event_group;
+
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT      BIT1
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_SCAN_DONE) {
-        esp32_scan_done = true;
-        esp32_scan_active = false;
-        // todo callback
-        if (esp32_scan_callback) {
-            esp32_scan_callback();
+    if (event_base == WIFI_EVENT) {
+        if (event_id == WIFI_EVENT_SCAN_DONE) {
+            esp32_scan_done = true;
+            esp32_scan_active = false;
+            if (esp32_scan_callback) {
+                esp32_scan_callback();
+            }
+        } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+            // we got disconnected or failed to connect
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        }
+        // You can also log WIFI_EVENT_STA_CONNECTED here if you want.
+    } else if (event_base == IP_EVENT) {
+        if (event_id == IP_EVENT_STA_GOT_IP) {
+            // DHCP gave us an IP
+            xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         }
     }
 }
@@ -34,7 +49,14 @@ int network_platform_init(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+    // Create event group once
+    s_wifi_event_group = xEventGroupCreate();
+
+    // Register handler for WIFI events (including scan + STA disconnect)
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                               &wifi_event_handler, NULL));
+    // Register handler for IP events (STA got IP)
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                                &wifi_event_handler, NULL));
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -99,31 +121,64 @@ int network_platform_connect_wifi(const char *ssid, const char *password,
                                   int timeout_ms) {
 
     bool open = !(password && strlen(password));
-    int auth;
 #ifdef BUILD_PICO
     auth = open ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     return cyw43_arch_wifi_connect_timeout_ms(ssid, password, auth, timeout_ms);
 #elif defined(BUILD_ESP32)
-    auth = open ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+    wifi_config_t wifi_config = { 0 };
 
-    wifi_config_t wifi_config = {
-        .sta =
-            {
-                .threshold.authmode = auth,
-            },
-    };
+    // SSID & password
     strncpy((char *)wifi_config.sta.ssid, ssid,
             sizeof(wifi_config.sta.ssid) - 1);
     if (!open) {
         strncpy((char *)wifi_config.sta.password, password,
                 sizeof(wifi_config.sta.password) - 1);
+    } else {
+        wifi_config.sta.password[0] = '\0';
     }
 
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    esp_err_t result = esp_wifi_connect();
+    // Accept open or at least WPA2
+    wifi_config.sta.threshold.authmode = open ? WIFI_AUTH_OPEN
+                                              : WIFI_AUTH_WPA2_PSK;
+    wifi_config.sta.pmf_cfg.capable = true;
+    wifi_config.sta.pmf_cfg.required = false;
 
-    // ESP32 connect is async, we might need timeout logic..
-    return (result == ESP_OK) ? 0 : -1;
+    // Ensure STA netif exists and WiFi is in STA mode + started
+    if (!esp_netif_sta) {
+        esp_netif_sta = esp_netif_create_default_wifi_sta();
+    }
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    // Clear previous bits from any past attempt
+    xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+
+    // Apply config
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+
+    // Make sure we’re disconnected before connecting
+    esp_wifi_disconnect();
+
+    esp_err_t result = esp_wifi_connect();
+    if (result != ESP_OK) {
+        return -1;
+    }
+
+    // Wait for CONNECTED or FAIL or timeout
+    EventBits_t bits = xEventGroupWaitBits(
+        s_wifi_event_group,
+        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+        pdTRUE,        // clear bits on exit
+        pdFALSE,       // wait for either bit
+        pdMS_TO_TICKS(timeout_ms > 0 ? timeout_ms : 10000));
+
+    if (bits & WIFI_CONNECTED_BIT) {
+        return 0;  // success: got IP
+    } else {
+        // either FAIL bit set or timeout
+        esp_wifi_disconnect();
+        return -1;
+    }
 #endif
 }
 

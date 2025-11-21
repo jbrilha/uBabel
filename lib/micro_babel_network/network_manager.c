@@ -333,6 +333,45 @@ bool check_connectivity_via_dns() {
     return result == 0;
 }
 
+bool netif_has_valid_ip(struct netif *n) {
+    if (!n) return false;
+
+    const ip_addr_t *ip = &n->ip_addr;
+
+    // ensure IPv4 address is non-zero
+    if (IP_IS_V4(ip) && ip4_addr_isany(ip_2_ip4(ip))) {
+        return false;
+    }
+
+    return true;
+}
+
+bool netif_is_active_link(struct netif *n) {
+    if (!n) return false;
+
+    // uses helper macros from lwip/netif.h
+    if (!netif_is_up(n))        return false;
+    if (!netif_is_link_up(n))   return false;
+
+    return true;
+}
+
+bool is_candidate_wifi_interface(struct netif *n) {
+    if (!n) return false;
+
+    if (!netif_is_active_link(n)) return false;
+    if (!netif_has_valid_ip(n))   return false;
+
+    // Optional heuristics: interface name + number
+    // On many ports, Wi-Fi STA ends up as "st0" or "wl1", etc.
+    if ((n->name[0] == 's' && n->name[1] == 't') ||   // "st"
+        (n->name[0] == 'w' && n->name[1] == 'l')) {   // "wl"
+        return true;
+    }
+
+    return false;
+}
+
 void network_manager_task(void *params) {
     LOG_INFO(TAG, "Starting...\n");
 
@@ -360,6 +399,14 @@ void network_manager_task(void *params) {
                     connected = try_connect_wifi(&cfg.wifi_list[i]);
                     if (connected) {
                         struct netif *netif = netif_list;
+                        while(netif != NULL && !is_candidate_wifi_interface(netif)) {
+                            netif = netif->next;
+                        }
+                        if(netif == NULL) {
+                            LOG_ERROR(TAG, "No valid Wi-Fi network interface found after connection\n");
+                            connected = false;
+                            continue;
+                        }
                         ip_addr_t ip = netif->ip_addr;
 
                         network_event_t *evt = malloc(sizeof(network_event_t));
@@ -414,8 +461,16 @@ void network_manager_task(void *params) {
                                current->ssid);
                         if (network_platform_connect_wifi(current->ssid, NULL,
                                                           10000) == 0) {
-                            connected = true;
                             struct netif *netif = netif_list;
+                            while (netif != NULL && !is_candidate_wifi_interface(netif)) {
+                                netif = netif->next;
+                            }
+                            if (!netif) {
+                                LOG_ERROR(TAG, "No valid Wi-Fi interface after open-network connection\n");
+                                connected = false;
+                                current = current->next;
+                                continue;
+                            }
                             ip_addr_t ip = netif->ip_addr;
 
                             network_event_t *evt =
