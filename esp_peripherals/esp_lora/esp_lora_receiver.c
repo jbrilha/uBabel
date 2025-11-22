@@ -12,7 +12,8 @@ static const char *TAG = "SX127X_RECEIVER";
 
 static int total_packets_received = 0;
 
-void rx_callback(sx127x *device, uint8_t *data, uint16_t data_length) {
+void rx_callback(void *ctx, uint8_t *data, uint16_t data_length) {
+    sx127x *device = (sx127x *)ctx;
     if (data_length < sizeof(lora_pkt_t)) {
         ESP_LOGW(TAG, "Packet too small: %d bytes", data_length);
         return;
@@ -63,23 +64,24 @@ void rx_callback(sx127x *device, uint8_t *data, uint16_t data_length) {
 }
 
 
-void cad_callback(sx127x *device, int cad_detected) {
+void cad_callback(void *ctx, int cad_detected) {
+    sx127x *device = (sx127x *)ctx;
     if (cad_detected == 0) {
         ESP_LOGI(TAG, "cad not detected");
         ESP_ERROR_CHECK(
-            sx127x_set_opmod(SX127x_MODE_CAD, SX127x_MODULATION_LORA, device));
+            sx127x_set_opmod(SX127X_MODE_CAD, SX127X_MODULATION_LORA, device));
         return;
     }
     // put into RX mode first to handle interrupt as soon as possible
     ESP_ERROR_CHECK(
-        sx127x_set_opmod(SX127x_MODE_RX_CONT, SX127x_MODULATION_LORA, device));
+        sx127x_set_opmod(SX127X_MODE_RX_CONT, SX127X_MODULATION_LORA, device));
     ESP_LOGI(TAG, "cad detected\n");
 }
 
 void configure_receiver(sx127x *device) {
-    sx127x_rx_set_callback(rx_callback, device);
-    sx127x_lora_cad_set_callback(cad_callback, device);
+    sx127x_rx_set_callback(rx_callback, device, device);
+    sx127x_lora_cad_set_callback(cad_callback, device, device);
 
     ESP_ERROR_CHECK(
-        sx127x_set_opmod(SX127x_MODE_RX_CONT, SX127x_MODULATION_LORA, device));
+        sx127x_set_opmod(SX127X_MODE_RX_CONT, SX127X_MODULATION_LORA, device));
 }

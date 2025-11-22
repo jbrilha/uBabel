@@ -3,6 +3,6 @@ if(DEFINED BUILD_PICO)
 else()
     idf_component_register(SRCS spi_hal.c
                             INCLUDE_DIRS "." "../../shared"
-                            REQUIRES esp_timer driver gpio_hal
+                            REQUIRES esp_timer driver gpio_hal esp_driver_spi
     )
 endif()

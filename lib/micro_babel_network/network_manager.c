@@ -4,7 +4,7 @@
 #include "network_config.h"
 #include "network_events.h"
 
-#include "network_platform.h"
+#include "network_hal.h"
 
 #include "lwip/dns.h"
 #include "lwip/icmp.h"
@@ -97,7 +97,7 @@ static bool try_connect_wifi(const wifi_credentials_t *creds) {
     LOG_INFO(TAG, "Trying SSID: %s (%s)\n", creds->ssid,
            strlen(creds->pass) ? "secured" : "open");
 
-    return network_platform_connect_wifi(creds->ssid, creds->pass, 10000) == 0;
+    return network_hal_connect_wifi(creds->ssid, creds->pass, 10000) == 0;
 }
 
 /* static int scan_result(void *env, const cyw43_ev_scan_result_t *result) {
@@ -164,14 +164,14 @@ void scan_for_open_networks() {
     if (scan_in_progress) {
         // Already scanning: keep polling
         for (int i = 0; i < 1000; ++i) { // ~1 second
-            network_platform_poll();
+            network_hal_poll();
             vTaskDelay(pdMS_TO_TICKS(10));
-            if (!network_platform_scan_active()) {
+            if (!network_hal_scan_active()) {
                 break;
             }
         }
 
-        if (!network_platform_scan_active()) {
+        if (!network_hal_scan_active()) {
             LOG_INFO(TAG, "Wi-Fi scan completed.\n");
             scan_in_progress = false;
         } else {
@@ -181,7 +181,7 @@ void scan_for_open_networks() {
     }
 
     if (!connected && !scan_in_progress) {
-        int err = network_platform_wifi_scan(scan_result);
+        int err = network_hal_wifi_scan(scan_result);
         if (err != 0) {
             LOG_ERROR(TAG, "Failed to start Wi-Fi scan: %d\n", err);
             return;
@@ -192,14 +192,14 @@ void scan_for_open_networks() {
 
         // Start polling immediately
         for (int i = 0; i < 1000; ++i) { // ~1 second
-            network_platform_poll();
+            network_hal_poll();
             vTaskDelay(pdMS_TO_TICKS(10));
-            if (!network_platform_scan_active()) {
+            if (!network_hal_scan_active()) {
                 break;
             }
         }
 
-        if (!network_platform_scan_active()) {
+        if (!network_hal_scan_active()) {
             LOG_INFO(TAG, "Wi-Fi scan completed.\n");
             scan_in_progress = false;
         } else {
@@ -384,7 +384,7 @@ bool is_candidate_wifi_interface(struct netif *n) {
 void network_manager_task(void *params) {
     LOG_INFO(TAG, "Starting...\n");
 
-    if (network_platform_init()) {
+    if (network_hal_init()) {
         LOG_INFO(TAG, "Wi-Fi init failed\n");
         vTaskDelete(NULL);
     }
@@ -399,7 +399,7 @@ void network_manager_task(void *params) {
 
         if (!connected) {
             LOG_INFO(TAG, "I am not connected, will try to connect, my status is: connected=%s scan_in_progress=%s", connected?"true":"false", scan_in_progress?"true":"false");
-            network_platform_enable_sta_mode();
+            network_hal_enable_sta_mode();
 
             // I will try to connect
             if (!scan_in_progress) {
@@ -468,7 +468,7 @@ void network_manager_task(void *params) {
                     while (!connected && current != NULL) {
                         LOG_INFO(TAG, "Trying to connect to open network: %s\n",
                                current->ssid);
-                        if (network_platform_connect_wifi(current->ssid, NULL,
+                        if (network_hal_connect_wifi(current->ssid, NULL,
                                                           10000) == 0) {
                             struct netif *netif = netif_list;
                             while (netif != NULL && !is_candidate_wifi_interface(netif)) {
@@ -535,13 +535,13 @@ void network_manager_task(void *params) {
         } else { //Should be connected
             // Monitor link status check
             
-            //int curr_status = network_platform_link_status();
+            //int curr_status = network_hal_link_status();
 
             //if (curr_status != 1 || (!check_connectivity_via_ping_gateway() && !check_connectivity_via_dns())) {
             //if (curr_status != CYW43_LINK_UP && curr_status != CYW43_LINK_NONET) {
             //const ip4_addr_t *ip = netif_ip4_addr(netif_default);
             //if(!(netif_is_up(netif_default) && ip4_addr_isany(ip))) {
-            if(network_platform_link_status() != 1) {
+            if(network_hal_link_status() != 1) {
                 LOG_INFO(TAG, "[EVENT] Wi-Fi link lost.\n");
 
                 network_event_t *evt = malloc(sizeof(network_event_t));
@@ -564,7 +564,7 @@ void network_manager_task(void *params) {
                     free(evt);
                 }
 
-                network_platform_disconnect_wifi();
+                network_hal_disconnect_wifi();
                 connected = false;
                 // emit or handle evt here
                 LOG_INFO(TAG, "[EVENT] Disconnected from Wi-Fi.\n");

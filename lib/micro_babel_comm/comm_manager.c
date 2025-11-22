@@ -802,7 +802,7 @@ static void socket_manager_task(void *params)
     msg = NULL;
   }
 
-  sock = initialize_udp_socket((char *)params);
+  sock = initialize_udp_socket();
 
   if (sock < 0)
   {

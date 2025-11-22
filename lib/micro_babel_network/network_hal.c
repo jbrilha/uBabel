@@ -1,4 +1,4 @@
-#include "network_platform.h"
+#include "network_hal.h"
 
 #define MAX_CONNECTIONS 10
 
@@ -13,7 +13,7 @@ static scan_callback_t esp32_scan_callback = NULL;
 static EventGroupHandle_t s_wifi_event_group;
 
 #define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
+#define WIFI_FAIL_BIT BIT1
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
@@ -38,7 +38,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 }
 #endif
 
-int network_platform_init(void) {
+int network_hal_init(void) {
 #ifdef BUILD_PICO
     return cyw43_arch_init();
 #elif defined(BUILD_ESP32)
@@ -67,7 +67,7 @@ int network_platform_init(void) {
 #endif
 }
 
-void network_platform_enable_sta_mode(void) {
+void network_hal_enable_sta_mode(void) {
 #ifdef BUILD_PICO
     cyw43_arch_enable_sta_mode();
 #elif defined(BUILD_ESP32)
@@ -81,7 +81,7 @@ void network_platform_enable_sta_mode(void) {
 #endif
 }
 
-void network_platform_enable_ap_mode(const char *ssid, const char *password) {
+void network_hal_enable_ap_mode(const char *ssid, const char *password) {
     bool open = !(password && strlen(password));
     int auth;
 #ifdef BUILD_PICO
@@ -110,14 +110,21 @@ void network_platform_enable_ap_mode(const char *ssid, const char *password) {
                 sizeof(wifi_config.ap.password) - 1);
     }
 
+    wifi_interface_t wifi_interface;
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0)
+    wifi_interface = ESP_IF_WIFI_AP;
+#else
+    wifi_interface = WIFI_IF_AP;
+#endif
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(
-        esp_wifi_set_config((wifi_interface_t)ESP_IF_WIFI_AP, &wifi_config));
+        esp_wifi_set_config(wifi_interface, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 #endif
 }
 
-int network_platform_connect_wifi(const char *ssid, const char *password,
+int network_hal_connect_wifi(const char *ssid, const char *password,
                                   int timeout_ms) {
     int auth;
     bool open = !(password && strlen(password));
@@ -125,7 +132,7 @@ int network_platform_connect_wifi(const char *ssid, const char *password,
     auth = open ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     return cyw43_arch_wifi_connect_timeout_ms(ssid, password, auth, timeout_ms);
 #elif defined(BUILD_ESP32)
-    wifi_config_t wifi_config = { 0 };
+    wifi_config_t wifi_config = {0};
 
     // SSID & password
     strncpy((char *)wifi_config.sta.ssid, ssid,
@@ -138,16 +145,17 @@ int network_platform_connect_wifi(const char *ssid, const char *password,
     }
 
     // Accept open or at least WPA2
-    wifi_config.sta.threshold.authmode = open ? WIFI_AUTH_OPEN
-                                              : WIFI_AUTH_WPA2_PSK;
+    wifi_config.sta.threshold.authmode =
+        open ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
     wifi_config.sta.pmf_cfg.capable = true;
     wifi_config.sta.pmf_cfg.required = false;
 
     // Ensure STA netif exists and WiFi is in STA mode + started
-    network_platform_enable_sta_mode();
+    network_hal_enable_sta_mode();
 
     // Clear previous bits from any past attempt
-    xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    xEventGroupClearBits(s_wifi_event_group,
+                         WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
 
     // Apply config
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -162,14 +170,13 @@ int network_platform_connect_wifi(const char *ssid, const char *password,
 
     // Wait for CONNECTED or FAIL or timeout
     EventBits_t bits = xEventGroupWaitBits(
-        s_wifi_event_group,
-        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-        pdTRUE,        // clear bits on exit
-        pdFALSE,       // wait for either bit
+        s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+        pdTRUE,  // clear bits on exit
+        pdFALSE, // wait for either bit
         pdMS_TO_TICKS(timeout_ms > 0 ? timeout_ms : 10000));
 
     if (bits & WIFI_CONNECTED_BIT) {
-        return 0;  // success: got IP
+        return 0; // success: got IP
     } else {
         // either FAIL bit set or timeout
         esp_wifi_disconnect();
@@ -182,20 +189,19 @@ int network_platform_connect_wifi(const char *ssid, const char *password,
 extern cyw43_t cyw43_state;
 #endif
 
-void network_platform_disconnect_wifi(void) {
+void network_hal_disconnect_wifi(void) {
 #ifdef BUILD_PICO
     cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
-    //cyw43_arch_wifi_connect_async(NULL, NULL, 0); // aka disconnect
+    // cyw43_arch_wifi_connect_async(NULL, NULL, 0); // aka disconnect
 #elif defined(BUILD_ESP32)
     esp_wifi_disconnect();
 #endif
 }
 
-int network_platform_wifi_scan(scan_callback_t callback) {
+int network_hal_wifi_scan(scan_callback_t callback) {
 #ifdef BUILD_PICO
     cyw43_wifi_scan_options_t scan_opts = {0};
-    return cyw43_wifi_scan(&cyw43_state, &scan_opts, NULL,
-                           callback);
+    return cyw43_wifi_scan(&cyw43_state, &scan_opts, NULL, callback);
     // todo callback
 #elif defined(BUILD_ESP32)
     esp32_scan_callback = callback;
@@ -206,7 +212,7 @@ int network_platform_wifi_scan(scan_callback_t callback) {
 #endif
 }
 
-bool network_platform_scan_active(void) {
+bool network_hal_scan_active(void) {
 #ifdef BUILD_PICO
     return cyw43_wifi_scan_active(&cyw43_state);
 #elif defined(BUILD_ESP32)
@@ -214,7 +220,7 @@ bool network_platform_scan_active(void) {
 #endif
 }
 
-void network_platform_poll(void) {
+void network_hal_poll(void) {
 #ifdef BUILD_PICO
     cyw43_arch_poll();
 #elif defined(BUILD_ESP32)
@@ -223,7 +229,7 @@ void network_platform_poll(void) {
 #endif
 }
 
-int network_platform_link_status(void) {
+int network_hal_link_status(void) {
 #ifdef BUILD_PICO
     return cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
 #elif defined(BUILD_ESP32)

@@ -196,7 +196,7 @@ static void send_init_request(device_node_t* d) {
   }
 }
 
-static void iot_control_protocol_task() {
+static void iot_control_protocol_task(void* params) {
   event_t *event;
 
   while (true)

@@ -79,7 +79,7 @@ static bool check_node_exists(uint8_t* id) {
   return find_node(id, neighbors) || find_node(id, connecting) || find_node(id, candidates);
 }
 
-static void simple_overlay_task() {
+static void simple_overlay_task(void* params) {
   event_t *event;
 
   while (true)

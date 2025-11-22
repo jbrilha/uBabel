@@ -39,7 +39,7 @@ static lora_pkt_t *new_packet(int id, int power_level) {
     return pkt;
 }
 
-void tx_callback(sx127x *device) {
+void tx_callback(void *ctx) {
     if (messages_sent > 0) {
         ESP_LOGI(TAG, "transmitted packet with id: %d", messages_sent);
         vTaskDelay(pdMS_TO_TICKS(TX_INTERVAL_MS));
@@ -56,14 +56,14 @@ void transmit_packet_from_device(sx127x *device) {
     ESP_ERROR_CHECK(
         sx127x_lora_tx_set_for_transmission((uint8_t *)pkt, pkt_size, device));
     ESP_ERROR_CHECK(sx127x_tx_set_pa_config(
-        SX127x_PA_PIN_BOOST, supported_power_levels[current_power_level],
+        SX127X_PA_PIN_BOOST, supported_power_levels[current_power_level],
         device));
 
     current_power_level =
         (current_power_level + 1) % supported_power_levels_count;
 
     ESP_ERROR_CHECK(
-        sx127x_set_opmod(SX127x_MODE_TX, SX127x_MODULATION_LORA, device));
+        sx127x_set_opmod(SX127X_MODE_TX, SX127X_MODULATION_LORA, device));
 
     char payload_str[pkt->payload_len + 1];
     memcpy(payload_str, pkt->payload, pkt->payload_len);
@@ -94,13 +94,13 @@ void transmit_packet_from_device(sx127x *device) {
 }
 
 void configure_sender(sx127x *device) {
-    sx127x_tx_set_callback(tx_callback, device);
+    sx127x_tx_set_callback(tx_callback, device, device);
 
     ESP_ERROR_CHECK(sx127x_tx_set_pa_config(
-        SX127x_PA_PIN_BOOST, supported_power_levels[current_power_level],
+        SX127X_PA_PIN_BOOST, supported_power_levels[current_power_level],
         device));
     sx127x_tx_header_t header = {.enable_crc = true,
-                                 .coding_rate = SX127x_CR_4_5};
+                                 .coding_rate = SX127X_CR_4_5};
 
     ESP_ERROR_CHECK(sx127x_lora_tx_set_explicit_header(&header, device));
 }
