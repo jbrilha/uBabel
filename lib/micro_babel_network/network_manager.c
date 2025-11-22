@@ -359,15 +359,24 @@ bool netif_is_active_link(struct netif *n) {
 bool is_candidate_wifi_interface(struct netif *n) {
     if (!n) return false;
 
+    LOG_INFO(TAG, "Checking candidate interface: %c%c", n->name[0], n->name[1]);
+
     if (!netif_is_active_link(n)) return false;
     if (!netif_has_valid_ip(n))   return false;
 
     // Optional heuristics: interface name + number
+    #ifdef BUILD_ESP32
     // On many ports, Wi-Fi STA ends up as "st0" or "wl1", etc.
     if ((n->name[0] == 's' && n->name[1] == 't') ||   // "st"
         (n->name[0] == 'w' && n->name[1] == 'l')) {   // "wl"
         return true;
     }
+    #elif defined(BUILD_PICO)
+    if ((n->name[0] == 'w') ||                         // "w*"
+        (n->name[0] == 'c' && n->name[1] == 'y')) {   // "cy"
+        return true;
+    }
+    #endif
 
     return false;
 }
