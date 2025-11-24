@@ -3,6 +3,6 @@ if(DEFINED BUILD_PICO)
 else()
 idf_component_register(SRCS "gpio_hal.c"
                         INCLUDE_DIRS "."
-                        REQUIRES driver
+                        REQUIRES driver esp_driver_gpio
 )
 endif()
