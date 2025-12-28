@@ -9,7 +9,8 @@ void gpio_init_pin(int pin) {
     gpio_config(&io_conf);
 #else
     gpio_init(pin);
-    gpio_disable_pulls(pin); // this matches the ESP config but I'm not 100% sure it's necessary
+    gpio_disable_pulls(pin); // this matches the ESP config but I'm not 100%
+                             // sure it's necessary
 #endif
 }
 
@@ -39,10 +40,19 @@ int gpio_get_pin_level(int pin) {
 #endif
 }
 
-void hal_sleep_us(int us) { 
+// TODO move these into non-gpio HAL
+void hal_sleep_us(int us) {
 #if BUILD_ESP32
     ets_delay_us(us);
 #else
     sleep_us(us);
+#endif
+}
+
+uint32_t hal_millis(void) {
+#if BUILD_ESP32
+    return esp_timer_get_time() / 1000;
+#else
+    return to_ms_since_boot(get_absolute_time());
 #endif
 }
