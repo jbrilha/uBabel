@@ -1,18 +1,84 @@
 #ifndef LORA_H
 #define LORA_H
 
-#include "platform.h"
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-bool LoRa_init_on_pins(int8_t cs_pin, int8_t rst_pin, int8_t busy_pin,
-                       int8_t dio1_pin, int8_t rxen_pin, int8_t txen_pin);
-bool LoRa_init(void);
+typedef struct lora_radio lora_radio_t;
 
-bool LoRa_check_device(void);
+typedef struct {
+    uint32_t frequency;
+    uint32_t offset;
+    uint8_t spreading_factor;
+    uint8_t bandwidth;
+    int8_t tx_power;
+    uint8_t ramp_time;
+} lora_config_t;
 
-void LoRa_reset_device(void);
-void LoRa_check_busy(void);
-void LoRa_apply_config(void);
-void LoRa_set_mode(uint8_t mode);
+typedef struct {
+    uint8_t *data;
+    size_t length;
+    int16_t rssi;
+    int8_t snr;
+} lora_packet_t;
+
+struct lora_radio {
+    const char *name;
+
+    // hardware-specific (opaque pointer to sx126x or sx127x)
+    void *chip;
+
+    bool (*init)(lora_radio_t *r, const lora_config_t *config);
+    void (*deinit)(lora_radio_t *r);
+
+    void (*set_mode)(lora_radio_t *r, uint8_t mode);
+    void (*set_packet_type)(lora_radio_t *r, uint8_t packet_type);
+    void (*set_frequency)(lora_radio_t *r, uint64_t freq, int32_t offset);
+    void (*calibrate_image)(lora_radio_t *r, uint32_t freq);
+    void (*set_tx_params)(lora_radio_t *r, int8_t power, uint8_t ramp_time);
+    void (*set_modulation_params)(lora_radio_t *r, uint8_t spreading_factor,
+                                  uint8_t bandwidth, uint8_t code_rate,
+                                  uint8_t optimization);
+    void (*set_buf_base_addr)(lora_radio_t *r, uint8_t tx_base_addr,
+                              uint8_t rx_base_addr);
+    void (*set_packet_params)(lora_radio_t *r, uint16_t preamble_len,
+                              uint8_t fixed_or_variable_len, uint8_t packet_len,
+                              uint8_t CRC_mode, uint8_t IQ_mode);
+    void (*set_sync_word)(lora_radio_t *r, uint16_t sync_word);
+    void (*set_high_sensitivity)(lora_radio_t *r);
+
+    int (*sleep)(lora_radio_t *r);
+    int (*wakeup)(lora_radio_t *r);
+
+    int (*transmit)(lora_radio_t *r, const uint8_t *data, size_t len, uint32_t timeout_ms);
+    int (*receive)(lora_radio_t *r, lora_packet_t *packet, uint32_t timeout_ms);
+};
+
+bool lora_init_w_config(lora_radio_t *r, const lora_config_t *config);
+bool lora_init(lora_radio_t *r);
+void lora_deinit(lora_radio_t *r);
+
+void lora_set_mode(lora_radio_t *r, uint8_t mode);
+void lora_set_packet_type(lora_radio_t *r, uint8_t packet_type);
+void lora_set_frequency(lora_radio_t *r, uint64_t freq, int32_t offset);
+void lora_calibrate_image(lora_radio_t *r, uint32_t freq);
+void lora_set_tx_params(lora_radio_t *r, int8_t power, uint8_t ramp_time);
+void lora_set_modulation_params(lora_radio_t *r, uint8_t spreading_factor,
+                                uint8_t bandwidth, uint8_t code_rate,
+                                uint8_t optimization);
+void lora_set_buf_base_addr(lora_radio_t *r, uint8_t tx_base_addr,
+                            uint8_t rx_base_addr);
+void lora_set_packet_params(lora_radio_t *r, uint16_t preamble_len,
+                            uint8_t fixed_or_variable_len, uint8_t packet_len,
+                            uint8_t CRC_mode, uint8_t IQ_mode);
+void lora_set_sync_word(lora_radio_t *r, uint16_t sync_word);
+void lora_set_high_sensitivity(lora_radio_t *r);
+
+int lora_transmit(lora_radio_t *r, const uint8_t *data, size_t len, uint32_t timeout_ms);
+int lora_receive(lora_radio_t *r, lora_packet_t *packet, uint32_t timeout_ms);
+
+int lora_sleep(lora_radio_t *r);
+int lora_wakeup(lora_radio_t *r);
 
 #endif // !LORA_H

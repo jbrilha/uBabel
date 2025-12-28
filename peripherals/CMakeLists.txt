@@ -1,3 +1,4 @@
+add_subdirectory(lora)
 add_subdirectory(gpio_hal)
 add_subdirectory(adc_hal)
 add_subdirectory(i2c_hal)
