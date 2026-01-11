@@ -13,6 +13,8 @@
 #include <sys/param.h>
 #include <unistd.h>
 
+#include "freertos/FreeRTOS.h"
+
 #include "lvgl.h"
 
 static const char *TAG = "SPI_LCD_TOUCH";
@@ -29,6 +31,8 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #include "esp_lcd_ili9342.h"
 #elif CONFIG_LCD_CONTROLLER_ILI9488
 #include "esp_lcd_ili9488.h"
+#elif CONFIG_LCD_CONTROLLER_ST7789
+#include "esp_lcd_st7789.h"
 #endif
 
 #if CONFIG_LCD_TOUCH_ENABLED
@@ -37,7 +41,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 
 #define LCD_HOST SPI2_HOST
 
-#if CONFIG_LCD_CONTROLLER_ILI9341
+#if (CONFIG_LCD_CONTROLLER_ILI9341 || CONFIG_LCD_CONTROLLER_ST7789)
 #define TOUCH_HOST LCD_HOST
 
 #define LCD_H_RES 240
@@ -90,6 +94,13 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_BL_PIN 14
 
 #define TOUCH_CS_PIN 48
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+#define LCD_CS_PIN 2
+#define LCD_DC_PIN 4
+#define LCD_RST_PIN 3
+#define LCD_BL_PIN 8
+
+#define TOUCH_CS_PIN 12
 #endif
 
 // Bit number used to represent command and parameter
@@ -116,6 +127,13 @@ static bool display_initialized = false;
 static const bool mirror_x = true;
 #else
 static const bool mirror_x = false;
+#endif
+
+#if (CONFIG_LCD_CONTROLLER_ILI9341 || CONFIG_LCD_CONTROLLER_ILI9342 ||         \
+     CONFIG_LCD_CONTROLLER_ST7789)
+static const bool swap_rgb = true;
+#else
+static const bool swap_rgb = false;
 #endif
 
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
@@ -163,11 +181,13 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area,
     int offsetx2 = area->x2;
     int offsety1 = area->y1;
     int offsety2 = area->y2;
-    // because SPI LCD is big-endian, we need to swap the RGB bytes order
-#if CONFIG_LCD_CONTROLLER_ILI9341 || CONFIG_LCD_CONTROLLER_ILI9342
-    lv_draw_sw_rgb565_swap(px_map, (offsetx2 + 1 - offsetx1) *
-                                       (offsety2 + 1 - offsety1));
-#endif
+
+    if (swap_rgb) {
+        // because SPI LCD is big-endian, we need to swap the RGB bytes order
+        lv_draw_sw_rgb565_swap(px_map, (offsetx2 + 1 - offsetx1) *
+                                           (offsety2 + 1 - offsety1));
+    }
+
     // copy a buffer's content to a specific area of the display
     esp_lcd_panel_draw_bitmap(panel_handle, offsetx1, offsety1, offsetx2 + 1,
                               offsety2 + 1, px_map);
@@ -274,6 +294,10 @@ void init_display() {
     ESP_LOGI(TAG, "Install ILI9488 panel driver");
     ESP_ERROR_CHECK(esp_lcd_new_panel_ili9488(io_handle, &panel_config,
                                               320 * 25, &panel_handle));
+#elif CONFIG_LCD_CONTROLLER_ST7789
+    ESP_LOGI(TAG, "Install ST7789 panel driver");
+    ESP_ERROR_CHECK(
+        esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
 #endif
 
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
