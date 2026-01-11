@@ -19,6 +19,14 @@
 #define DIO1_PIN (14)
 #define RXEN_PIN (18)
 #define TXEN_PIN (19)
+#else
+// these should be tested first!!
+#define CS_PIN (9)
+#define RST_PIN (1)
+#define BUSY_PIN (20)
+#define DIO1_PIN (14)
+#define RXEN_PIN (18)
+#define TXEN_PIN (19)
 #endif
 
 typedef struct {

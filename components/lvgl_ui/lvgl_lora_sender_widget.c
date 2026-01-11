@@ -1,7 +1,7 @@
 #include "lvgl_lora_sender_widget.h"
 #include "esp_log.h"
 
-#include "lora_types.h"
+#include "lora.h"
 #include <stdio.h>
 
 #define RSSI_BAR_MIN (-157)

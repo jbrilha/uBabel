@@ -14,7 +14,6 @@
 #include "network_manager.h"
 
 #include "app.h"
-#include "esp_lora.h"
 #include "i2c_hal.h"
 #include "platform.h"
 #include "spi_hal.h"
@@ -43,16 +42,17 @@ void init_peripherals(void) {
 
     m5_buttons_init();
 
+    // esp_lora has been removed, working on a port of a different library right now, sorry!!
 #if M5STACK_RECEIVER
-    esp_lora_init();
+    // esp_lora_init();
 
     ui_manager_set_lora_rec_widget();
-    esp_lora_start_receiver();
+    // esp_lora_start_receiver();
 #elif M5STACK_SENDER
-    esp_lora_init();
+    // esp_lora_init();
 
     ui_manager_set_lora_sndr_widget();
-    esp_lora_start_sender();
+    // esp_lora_start_sender();
 #else
     ui_manager_set_tardis_widget();
 #endif
