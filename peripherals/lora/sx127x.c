@@ -41,26 +41,29 @@ static uint32_t get_actual_bandwidth(uint8_t bw_reg_value);
 static float calc_symbol_ms(float bw, uint8_t sf);
 static uint8_t calc_optimization(uint8_t bw, uint8_t sf);
 
-static void write_register(sx127x_t *c, uint16_t address, uint8_t value) {
-    uint8_t tx_buf[2] = {
-        address | 0x80, // mask address for writing
-        value,
-    };
-
-    spi_hal_transmit(c->spi_dev, tx_buf, 2);
+static void write_register(sx127x_t *c, uint8_t address, uint8_t value) {
+    uint8_t masked_addr = address | 0x80;
+    if (!spi_hal_write_register(c->spi_dev, masked_addr, &value, 1)) {
+        ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI VAL %d TO ADDR %d", value,
+                 address);
+    }
 }
 
-static uint8_t read_register(sx127x_t *c, uint16_t address) {
+static uint8_t read_register(sx127x_t *c, uint8_t address) {
     uint8_t data;
 
-    uint8_t rx_buf[1] = {
-        address & 0x7F, // mask address for reading
-    };
-
-    spi_hal_write_then_read(c->spi_dev, rx_buf, 1, &data, 1, 0xFF);
+    uint8_t masked_addr = address & 0x7F;
+    if (!spi_hal_read_register(c->spi_dev, masked_addr, &data, 1)) {
+        ESP_LOGE(TAG, "FAILED TO READ SPI VAL FROM ADDR %d", address);
+        return 0;
+    }
 
     return data;
 }
+
+// TODO might be worth distinguishing with different models
+static bool rx_done(sx127x_t *c) { return gpio_get_level(c->dio0_pin); }
+static bool tx_done(sx127x_t *c) { return gpio_get_level(c->dio0_pin); }
 
 static sx127x_t *sx127x_chip_init_on_pins(int8_t cs_pin, int8_t rst_pin,
                                           int8_t dio0_pin) {
@@ -436,7 +439,7 @@ static void sx127x_set_DIO_IRQ_params(lora_radio_t *r, uint16_t irq_mask,
     write_register(c, REG_DIOMAPPING1, (mask0 + mask1 + mask2));
 }
 
-void sx127x_clear_IRQ_status(lora_radio_t *r, uint16_t irq_mask) {
+static void sx127x_clear_IRQ_status(lora_radio_t *r, uint16_t irq_mask) {
 
     sx127x_t *c = (sx127x_t *)r->chip;
     uint8_t mask_LSB;
@@ -478,7 +481,10 @@ static int sx127x_transmit(lora_radio_t *r, const uint8_t *data, size_t len,
     uint8_t tx_buf[1 + len];
     tx_buf[0] = WREG_FIFO;
     memcpy(&tx_buf[1], data, len);
-    spi_hal_transmit(c->spi_dev, tx_buf, 1 + len);
+    if (!spi_hal_write_reg_buffer(c->spi_dev, WREG_FIFO, data, len)) {
+        ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI");
+        return 0;
+    }
 
     c->tx_packet_len = len;
     write_register(c, REG_PAYLOADLENGTH, c->tx_packet_len);
@@ -486,24 +492,24 @@ static int sx127x_transmit(lora_radio_t *r, const uint8_t *data, size_t len,
     sx127x_set_tx(r, 0);
 
     if (timeout_ms == 0) {
-        // wait for pin to go high, TX finished
-        while (!gpio_get_level(c->dio0_pin))
-            ;
+        while (!tx_done(c)) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
     } else {
         start_ms = hal_millis();
-        while (!gpio_get_level(c->dio0_pin) &&
-               ((hal_millis() - start_ms) < timeout_ms))
-            ;
+        while (!tx_done(c) && ((hal_millis() - start_ms) < timeout_ms)) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
     }
 
     sx127x_set_mode(r, MODE_STDBY_RC); // ensure we leave function with TX off
 
-    if (!gpio_get_level(c->dio0_pin)) {
+    if (!tx_done(c)) {
         c->IRQ_MSB = IRQ_TX_TIMEOUT;
         return 0;
     }
 
-    return c->tx_packet_len; // no timeout, so TXdone must have been set
+    return c->tx_packet_len;
 }
 
 static bool sx127x_driver_init(lora_radio_t *r, const lora_config_t *config) {
