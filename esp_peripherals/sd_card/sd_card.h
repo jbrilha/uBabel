@@ -18,9 +18,11 @@
 #define SDMMC_D3_PIN -1
 
 esp_err_t mount_sdspi_card(int cs_pin);
+#if SOC_SDMMC_HOST_SUPPORTED
 esp_err_t mount_sdmmc_card_1w(int clk_pin, int cmd_pin, int d0_pin);
 esp_err_t mount_sdmmc_card_4w(int clk_pin, int cmd_pin, int d0_pin, int d1_pin,
                               int d2_pin, int d3_pin);
+#endif
 void unmount_sd_card(void);
 
 esp_err_t write_to_file(const char *file_name, const char *data);

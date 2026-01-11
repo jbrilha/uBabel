@@ -49,6 +49,7 @@ static esp_vfs_fat_sdmmc_mount_config_t init_mount_config(void) {
     return mount_config;
 }
 
+#if SOC_SDMMC_HOST_SUPPORTED
 static esp_err_t
 mount_sdmmc_card(esp_vfs_fat_sdmmc_mount_config_t *mount_config,
                  sdmmc_host_t *host, sdmmc_slot_config_t *slot_config) {
@@ -116,6 +117,7 @@ esp_err_t mount_sdmmc_card_4w(int clk_pin, int cmd_pin, int d0_pin, int d1_pin,
 
     return mount_sdmmc_card(&mount_config, &host, &slot_config);
 }
+#endif
 
 esp_err_t mount_sdspi_card(int cs_pin) {
     esp_err_t ret;
