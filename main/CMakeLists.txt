@@ -36,6 +36,7 @@ if(DEFINED BUILD_PICO)
         paj7620
         lcd16x2
         bmp280
+        lora
         app
     )
 

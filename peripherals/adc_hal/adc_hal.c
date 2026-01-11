@@ -53,8 +53,11 @@ static const int gpio_to_adc_channel[] = {
 // clang-format on
 
 #else
+// TODO FOR OTHER BOARDS
+#define MIN_GPIO 1
+#define MAX_GPIO 20
+
 static const int gpio_to_adc_channel[] = {
-    // TODO FOR OTHER BOARDS
 };
 #endif
 
