@@ -1,6 +1,7 @@
 #include "lvgl_flex_layout.h"
+#include "freertos/FreeRTOS.h"
 
-static _lock_t *lvgl_lock = NULL;
+static SemaphoreHandle_t lvgl_lock = NULL;
 static lv_obj_t *ui_col_0 = NULL;
 static lv_obj_t *ui_col_1 = NULL;
 
@@ -39,16 +40,16 @@ lv_obj_t *flex_col_create_right(lv_obj_t *container) {
     return col;
 }
 
-void lvgl_flex_layout_init(lv_display_t *disp, _lock_t *lock) {
+void lvgl_flex_layout_init(lv_display_t *disp, SemaphoreHandle_t lock) {
     lvgl_lock = lock;
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
     if (lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
 
         ui_col_0 = flex_col_create_left(scr);
         ui_col_1 = flex_col_create_right(scr);
 
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }

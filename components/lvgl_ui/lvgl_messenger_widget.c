@@ -1,7 +1,8 @@
 #include "lvgl_messenger_widget.h"
+#include "freertos/FreeRTOS.h"
 #include "misc/lv_style.h"
 
-static _lock_t *lvgl_lock = NULL;
+static SemaphoreHandle_t lvgl_lock = NULL;
 static lv_obj_t *ui_txt = NULL;
 static lv_obj_t *ui_btn = NULL;
 
@@ -48,30 +49,30 @@ static lv_obj_t *separator_create(lv_obj_t *container) {
 
 void messenger_widget_set_txt(const char *txt) {
     if (ui_txt && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_label_set_text(ui_txt, txt);
         // this is just to separate it a bit
         lv_label_ins_text(ui_txt, LV_LABEL_POS_LAST, "    | ");
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
-void messenger_widget_init(lv_display_t *disp, _lock_t *lock) {
+void messenger_widget_init(lv_display_t *disp, SemaphoreHandle_t lock) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
     messenger_widget_init_on_container(scr, lock);
 }
 
-void messenger_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
+void messenger_widget_init_on_container(lv_obj_t *container, SemaphoreHandle_t lock) {
     lvgl_lock = lock;
 
     if (lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         if (!ui_txt) {
             ui_txt = scrolling_text_create(container);
             separator_create(container);
             ui_btn = send_msg_btn_create(container);
         }
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }

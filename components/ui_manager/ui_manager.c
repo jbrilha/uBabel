@@ -8,8 +8,8 @@
 
 static const char *TAG = "UI_MANAGER";
 
-lv_display_t *display;
-_lock_t *lvgl_lock;
+static lv_display_t *display;
+static SemaphoreHandle_t lvgl_lock = NULL;
 
 void ui_manager_init(void) {
 

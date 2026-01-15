@@ -1,11 +1,12 @@
 #include "lvgl_camera_widget.h"
 #include "core/lv_obj_pos.h"
+#include "freertos/FreeRTOS.h"
 #include "esp_log.h"
 #include "misc/lv_color.h"
 
 static const char* TAG = "CAMERA_WIDGET";
 
-static _lock_t *lvgl_lock = NULL;
+static SemaphoreHandle_t lvgl_lock = NULL;
 static lv_obj_t *cam_image = NULL;
 static lv_image_dsc_t img_dsc = {0};
 static lv_obj_t *shutter_btn = NULL;
@@ -65,28 +66,28 @@ static void update_camera_feed(uint8_t *buf, size_t len) {
 
 void camera_widget_set_feed(uint8_t *buf, size_t len) {
     if (buf && len > 0 && cam_image && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         update_camera_feed(buf, len);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
-void camera_widget_init(lv_display_t *disp, _lock_t *lock) {
+void camera_widget_init(lv_display_t *disp, SemaphoreHandle_t lock) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
     camera_widget_init_on_container(scr, lock);
 }
 
-void camera_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
+void camera_widget_init_on_container(lv_obj_t *container, SemaphoreHandle_t lock) {
     lvgl_lock = lock;
 
     if (lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         if (!cam_image) {
             cam_image = image_create(container);
             shutter_btn = shutter_btn_create(container);
             shutter_lbl = shutter_lbl_create(container);
         }
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }

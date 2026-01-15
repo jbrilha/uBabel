@@ -1,4 +1,5 @@
 #include "lvgl_tardis_widget.h"
+#include "freertos/FreeRTOS.h"
 #include "esp_log.h"
 
 #include "comm_manager.h"
@@ -10,7 +11,7 @@ static const char *TAG = "TaRDIS Widget";
 static const char *NOT_CONNECTED = "Not connected";
 static const char *NO_IP = "0.0.0.0";
 
-static _lock_t *lvgl_lock = NULL;
+static SemaphoreHandle_t lvgl_lock = NULL;
 static lv_obj_t *notif_box = NULL;
 static lv_obj_t *network_box = NULL;
 static lv_obj_t *menu = NULL;
@@ -67,28 +68,28 @@ static lv_group_t *tardis_widget_init_input_group(void) {
 
 void tardis_widget_menu_next(void) {
     if (input_group && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_group_focus_next(input_group);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void tardis_widget_menu_prev(void) {
     if (input_group && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_group_focus_prev(input_group);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void tardis_widget_menu_select(void) {
     if (input_group && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_obj_t *focused = lv_group_get_focused(input_group);
         if (focused) {
             lv_obj_send_event(focused, LV_EVENT_CLICKED, NULL);
         }
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
@@ -256,10 +257,10 @@ void tardis_widget_populate_menu(void) {
         int node_count = get_nodes_snapshot(&nodes);
 
         if (lvgl_lock) {
-            _lock_acquire(lvgl_lock);
+            xSemaphoreTake(lvgl_lock, portMAX_DELAY);
             populate_menu(menu, device_info, nodes, node_count);
             lv_obj_send_event(menu, LV_EVENT_VALUE_CHANGED, NULL);
-            _lock_release(lvgl_lock);
+            xSemaphoreGive(lvgl_lock);
         }
 
         for (int i = 0; i < node_count; i++) {
@@ -336,7 +337,7 @@ static lv_obj_t *create_network_box(lv_obj_t *container) {
 
 void tardis_widget_set_network_up_info(network_event_t *e) {
     if (network_box && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
 
         lv_obj_t *text_container = lv_obj_get_child(network_box, 1);
 
@@ -349,13 +350,13 @@ void tardis_widget_set_network_up_info(network_event_t *e) {
         lv_obj_set_style_border_color(network_label, lv_color_hex(0x80ff80), 0);
         lv_obj_set_style_border_color(ip_label, lv_color_hex(0x80ff80), 0);
 
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void tardis_widget_set_network_down(void) {
     if (network_box && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_obj_t *text_container = lv_obj_get_child(network_box, 1);
 
         lv_obj_t *network_label = lv_obj_get_child(text_container, 0);
@@ -366,31 +367,31 @@ void tardis_widget_set_network_down(void) {
 
         lv_obj_set_style_border_color(network_label, lv_color_hex(0xff8080), 0);
         lv_obj_set_style_border_color(ip_label, lv_color_hex(0xff8080), 0);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void tardis_widget_set_notif_txt(const char *notif) {
     if (notif_box && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         // second child, based on creation order!!
         lv_obj_t *notif_label = lv_obj_get_child(notif_box, 1);
         lv_label_set_text_fmt(notif_label, "%s%s", notif, SEP);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
-void tardis_widget_init(lv_display_t *disp, _lock_t *lock) {
+void tardis_widget_init(lv_display_t *disp, SemaphoreHandle_t lock) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
     tardis_widget_init_on_container(scr, lock);
 }
 
-void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
+void tardis_widget_init_on_container(lv_obj_t *container, SemaphoreHandle_t lock) {
     lvgl_lock = lock;
 
     if (lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
 
         lv_obj_t *col_box = lv_obj_create(container);
         lv_obj_remove_style_all(col_box);
@@ -427,6 +428,6 @@ void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
             notif_box = create_notif_box(col_box);
         }
 
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }

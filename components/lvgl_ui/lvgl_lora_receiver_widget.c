@@ -1,4 +1,5 @@
 #include "lvgl_lora_receiver_widget.h"
+#include "freertos/FreeRTOS.h"
 #include "esp_log.h"
 
 #include "lora.h"
@@ -16,7 +17,7 @@
 
 #define ANIM_DURATION 2000
 
-static _lock_t *lvgl_lock = NULL;
+static SemaphoreHandle_t lvgl_lock = NULL;
 static lv_obj_t *rssi_bar = NULL;
 static lv_obj_t *snr_bar = NULL;
 static lv_obj_t *sender_txt = NULL;
@@ -270,77 +271,77 @@ static lv_obj_t *create_freq_err_txt(lv_obj_t *container) {
 
 void lora_rec_widget_set_rssi(int32_t rssi) {
     if (rssi_bar && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_bar_set_value(rssi_bar, rssi, LV_ANIM_OFF);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void lora_rec_widget_animate_to_rssi(int32_t rssi) {
     if (rssi_bar && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lora_rec_widget_animate_to_val_unsafe(rssi_bar, rssi);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void lora_rec_widget_set_snr(float snr) {
     if (snr_bar && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         int32_t snr_scaled = (int32_t)(snr * 10.0f);
         lv_bar_set_value(snr_bar, snr_scaled, LV_ANIM_OFF);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void lora_rec_widget_animate_to_snr(float snr) {
     if (snr_bar && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         int32_t snr_scaled = (int32_t)(snr * 10.0f);
         lora_rec_widget_animate_to_val_unsafe(snr_bar, snr_scaled);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void lora_rec_widget_set_freq_err(int32_t err) {
     if (freq_err_txt && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         char str[16];
         snprintf(str, sizeof(str), "%ld (Hz)", err);
         lv_label_set_text(freq_err_txt, str);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void lora_rec_widget_set_message_id_txt(const char *id) {
     if (message_id_txt && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_label_set_text(message_id_txt, id);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void lora_rec_widget_set_message_txt(const char *txt) {
     if (message_txt && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_label_set_text(message_txt, txt);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void lora_rec_widget_set_sender_txt(const char *sender) {
     if (sender_txt && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_label_set_text(sender_txt, sender);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
 void lora_rec_widget_set_recipient_txt(const char *recipient) {
     if (recipient_txt && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_label_set_text(recipient_txt, recipient);
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }
 
@@ -370,17 +371,17 @@ void lora_rec_widget_set_info_from_event(event_t *e) {
     lora_rec_widget_set_message_txt(payload_str);
 }
 
-void lora_rec_widget_init(lv_display_t *disp, _lock_t *lock) {
+void lora_rec_widget_init(lv_display_t *disp, SemaphoreHandle_t lock) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
     lora_rec_widget_init_on_container(scr, lock);
 }
 
-void lora_rec_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
+void lora_rec_widget_init_on_container(lv_obj_t *container, SemaphoreHandle_t lock) {
     lvgl_lock = lock;
 
     if (lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+        xSemaphoreTake(lvgl_lock, portMAX_DELAY);
         lv_obj_t *bars_container = lv_obj_create(container);
         lv_obj_remove_style_all(bars_container);
         lv_obj_set_size(bars_container, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -412,6 +413,6 @@ void lora_rec_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
         if (!message_txt) {
             message_txt = create_message_txt(bars_container);
         }
-        _lock_release(lvgl_lock);
+        xSemaphoreGive(lvgl_lock);
     }
 }

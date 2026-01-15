@@ -14,7 +14,6 @@
 #include <unistd.h>
 
 #include "freertos/FreeRTOS.h"
-
 #include "lvgl.h"
 
 static const char *TAG = "SPI_LCD_TOUCH";
@@ -121,7 +120,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 
 // LVGL library is not thread-safe, this example will call LVGL APIs from
 // different tasks, so use a mutex to protect it
-static _lock_t lvgl_api_lock;
+static SemaphoreHandle_t lvgl_api_lock = NULL;
 static esp_lcd_panel_io_handle_t io_handle = NULL;
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
@@ -253,9 +252,9 @@ static void lvgl_port_task(void *arg) {
     ESP_LOGI(TAG, "Starting LVGL task");
     uint32_t time_till_next_ms = 0;
     while (1) {
-        _lock_acquire(&lvgl_api_lock);
+        xSemaphoreTake(lvgl_api_lock, portMAX_DELAY);
         time_till_next_ms = lv_timer_handler();
-        _lock_release(&lvgl_api_lock);
+        xSemaphoreGive(lvgl_api_lock);
 
         // in case of triggering a task watch dog time out
         time_till_next_ms = MAX(time_till_next_ms, LVGL_TASK_MIN_DELAY_MS);
@@ -339,7 +338,7 @@ static void lvgl_touch_cb(lv_indev_t *indev, lv_indev_data_t *data) {
     }
 }
 
-#ifdef USE_ILI9488
+#if USE_ILI9488
 void init_touch_spi() {
     spi_bus_config_t touch_buscfg = {
         .sclk_io_num = TOUCH_CLK_PIN,
@@ -444,6 +443,13 @@ void init_touch() {
 #endif
 
 void lcd_init_task(void *pvParameters) {
+    lvgl_api_lock = xSemaphoreCreateMutex();
+    if (!lvgl_api_lock) {
+        ESP_LOGE(TAG, "failed to create semaphore");
+        vTaskDelete(NULL);
+    } else {
+        ESP_LOGI(TAG, "successfully created semaphore");
+    }
 #ifndef CONFIG_IDF_TARGET_ESP32C6
     ESP_LOGI(TAG, "Turn off LCD backlight");
     gpio_config_t bk_gpio_config = {.mode = GPIO_MODE_OUTPUT,
@@ -489,12 +495,12 @@ void lcd_init_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-_lock_t *spi_lcd_get_lvgl_lock(void) {
+SemaphoreHandle_t spi_lcd_get_lvgl_lock(void) {
     if (!display_initialized) {
         return NULL;
     }
 
-    return &lvgl_api_lock;
+    return lvgl_api_lock;
 }
 
 lv_display_t *spi_lcd_get_display(void) {

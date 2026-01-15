@@ -3,9 +3,10 @@
 
 #include "lora_events.h"
 #include "lvgl.h"
+#include "freertos/FreeRTOS.h"
 
-void lora_sndr_widget_init(lv_display_t *disp, _lock_t *lock);
-void lora_sndr_widget_init_on_container(lv_obj_t *container, _lock_t *lock);
+void lora_sndr_widget_init(lv_display_t *disp, SemaphoreHandle_t lock);
+void lora_sndr_widget_init_on_container(lv_obj_t *container, SemaphoreHandle_t lock);
 
 void lora_sndr_widget_set_sender_txt(const char *sender);
 void lora_sndr_widget_set_message_txt(const char *msg);

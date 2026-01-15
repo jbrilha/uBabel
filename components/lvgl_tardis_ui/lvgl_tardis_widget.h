@@ -4,10 +4,11 @@
 #include "proto_iot_control.h"
 #include "event.h"
 #include "network_events.h"
+#include "freertos/FreeRTOS.h"
 #include "lvgl.h"
 
-void tardis_widget_init(lv_display_t *disp, _lock_t *lock);
-void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock);
+void tardis_widget_init(lv_display_t *disp, SemaphoreHandle_t lock);
+void tardis_widget_init_on_container(lv_obj_t *container, SemaphoreHandle_t lock);
 
 void tardis_widget_set_notif_txt(const char *notif);
 
