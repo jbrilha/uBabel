@@ -20,18 +20,23 @@
 static const char *TAG = "SPI_LCD_TOUCH";
 
 #ifdef M5STACK_CORE_BASIC
-#define CONFIG_LCD_CONTROLLER_ILI9488 0
-#define CONFIG_LCD_CONTROLLER_ILI9341 0
-#define CONFIG_LCD_CONTROLLER_ILI9342 1
+#define USE_ILI9488 0
+#define USE_ILI9341 0
+#define USE_ILI9342 1
+#else
+#define USE_ILI9341 CONFIG_LCD_CONTROLLER_ILI9341
+#define USE_ILI9342 CONFIG_LCD_CONTROLLER_ILI9342
+#define USE_ILI9488 CONFIG_LCD_CONTROLLER_ILI9488
+#define USE_ST7789 CONFIG_LCD_CONTROLLER_ST7789
 #endif
 
-#if CONFIG_LCD_CONTROLLER_ILI9341
+#if USE_ILI9341
 #include "esp_lcd_ili9341.h"
-#elif CONFIG_LCD_CONTROLLER_ILI9342
+#elif USE_ILI9342
 #include "esp_lcd_ili9342.h"
-#elif CONFIG_LCD_CONTROLLER_ILI9488
+#elif USE_ILI9488
 #include "esp_lcd_ili9488.h"
-#elif CONFIG_LCD_CONTROLLER_ST7789
+#elif USE_ST7789
 #include "esp_lcd_st7789.h"
 #endif
 
@@ -41,7 +46,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 
 #define LCD_HOST SPI2_HOST
 
-#if (CONFIG_LCD_CONTROLLER_ILI9341 || CONFIG_LCD_CONTROLLER_ST7789)
+#if (USE_ILI9341 || USE_ST7789)
 #define TOUCH_HOST LCD_HOST
 
 #define LCD_H_RES 240
@@ -50,7 +55,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_PIXEL_CLOCK_HZ (40 * 1000 * 1000)
 #define BITS_PER_PIXEL 16
 
-#elif CONFIG_LCD_CONTROLLER_ILI9342
+#elif USE_ILI9342
 #define TOUCH_HOST LCD_HOST
 
 #define LCD_H_RES 320
@@ -59,7 +64,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_PIXEL_CLOCK_HZ (40 * 1000 * 1000)
 #define BITS_PER_PIXEL 16
 
-#elif CONFIG_LCD_CONTROLLER_ILI9488
+#elif USE_ILI9488
 #define TOUCH_HOST SPI3_HOST
 
 #define LCD_H_RES 320
@@ -106,7 +111,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_CMD_BITS 8
 #define LCD_PARAM_BITS 8
 
-#define LVGL_DRAW_BUF_LINES 20 // number of display lines in each draw buffer
+#define LVGL_DRAW_BUF_LINES (LCD_V_RES / 3)
 // static const size_t LV_BUFFER_SIZE = LCD_H_RES * LVGL_DRAW_BUF_LINES;
 #define LVGL_TICK_PERIOD_MS 2
 #define LVGL_TASK_MAX_DELAY_MS 500
@@ -121,14 +126,13 @@ static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
 static bool display_initialized = false;
 
-#if CONFIG_LCD_CONTROLLER_ILI9341
+#if USE_ILI9341
 static const bool mirror_x = true;
 #else
 static const bool mirror_x = false;
 #endif
 
-#if (CONFIG_LCD_CONTROLLER_ILI9341 || CONFIG_LCD_CONTROLLER_ILI9342 ||         \
-     CONFIG_LCD_CONTROLLER_ST7789)
+#if (USE_ILI9341 || USE_ILI9342 || USE_ST7789)
 static const bool swap_rgb = true;
 #else
 static const bool swap_rgb = false;
@@ -281,19 +285,19 @@ void init_display() {
         .bits_per_pixel = BITS_PER_PIXEL,
     };
 
-#if CONFIG_LCD_CONTROLLER_ILI9341
+#if USE_ILI9341
     ESP_LOGI(TAG, "Install ILI9341 panel driver");
     ESP_ERROR_CHECK(
         esp_lcd_new_panel_ili9341(io_handle, &panel_config, &panel_handle));
-#elif CONFIG_LCD_CONTROLLER_ILI9342
+#elif USE_ILI9342
     ESP_LOGI(TAG, "Install ILI9342 panel driver");
     ESP_ERROR_CHECK(
         esp_lcd_new_panel_ili9342(io_handle, &panel_config, &panel_handle));
-#elif CONFIG_LCD_CONTROLLER_ILI9488
+#elif USE_ILI9488
     ESP_LOGI(TAG, "Install ILI9488 panel driver");
     ESP_ERROR_CHECK(esp_lcd_new_panel_ili9488(io_handle, &panel_config,
                                               320 * 25, &panel_handle));
-#elif CONFIG_LCD_CONTROLLER_ST7789
+#elif USE_ST7789
     ESP_LOGI(TAG, "Install ST7789 panel driver");
     ESP_ERROR_CHECK(
         esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
@@ -301,7 +305,7 @@ void init_display() {
 
     ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
-#if CONFIG_LCD_CONTROLLER_ILI9342
+#if USE_ILI9342
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, true));
 #endif
     ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_handle, 0, 0));
@@ -334,7 +338,7 @@ static void lvgl_touch_cb(lv_indev_t *indev, lv_indev_data_t *data) {
     }
 }
 
-#ifdef CONFIG_LCD_CONTROLLER_ILI9488
+#ifdef USE_ILI9488
 void init_touch_spi() {
     spi_bus_config_t touch_buscfg = {
         .sclk_io_num = TOUCH_CLK_PIN,
@@ -465,7 +469,7 @@ void lcd_init_task(void *pvParameters) {
 
 #if CONFIG_LCD_TOUCH_ENABLED
 
-#if CONFIG_LCD_CONTROLLER_ILI9488
+#if USE_ILI9488
     // for the ILI9488 it needs to be a separate bus...
     ESP_LOGI(TAG, "Initialize touch SPI bus");
     init_touch_spi();
