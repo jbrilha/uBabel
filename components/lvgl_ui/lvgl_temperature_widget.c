@@ -8,6 +8,7 @@
 
 #define ANIM_DURATION 2000
 
+static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *ui_bar = NULL;
 static lv_obj_t *ui_btn = NULL;
 
@@ -113,7 +114,7 @@ static lv_obj_t *temperature_fetch_btn_create(lv_obj_t *container) {
 }
 
 static lv_obj_t *temperature_bar_create(lv_obj_t *container, bool use_style,
-                                        bool animate) {
+                                 bool animate) {
     lv_obj_t *new_bar = lv_bar_create(container);
 
     if (use_style) {
@@ -140,16 +141,16 @@ static lv_obj_t *temperature_bar_create(lv_obj_t *container, bool use_style,
 }
 
 void temperature_bar_set_val(int32_t temp) {
-    if (ui_bar) {
-        lv_lock();
+    if (ui_bar && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
         lv_bar_set_value(ui_bar, temp, LV_ANIM_OFF);
-        lv_unlock();
+        _lock_release(lvgl_lock);
     }
 }
 
 void temperature_bar_animate_to_val(int32_t temp) {
-    if (ui_bar) {
-        lv_lock();
+    if (ui_bar && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
 
         lv_anim_t a;
         lv_anim_init(&a);
@@ -159,23 +160,81 @@ void temperature_bar_animate_to_val(int32_t temp) {
         lv_anim_set_values(&a, BAR_MIN, temp);
         lv_anim_set_repeat_count(&a, 1);
         lv_anim_start(&a);
-        lv_unlock();
+        _lock_release(lvgl_lock);
     }
 }
 
-void temperature_widget_init(lv_display_t *disp, bool use_style, bool animate) {
+void temperature_widget_init(lv_display_t *disp, _lock_t *lock, bool use_style,
+                          bool animate) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
-    temperature_widget_init_on_container(scr, use_style, animate);
+    temperature_widget_init_on_container(scr, lock, use_style, animate);
 }
 
-void temperature_widget_init_on_container(lv_obj_t *container, bool use_style,
-                                          bool animate) {
+void temperature_widget_init_on_container(lv_obj_t *container, _lock_t *lock,
+                                       bool use_style, bool animate) {
+    lvgl_lock = lock;
 
-    lv_lock();
-    if (!ui_bar) {
-        ui_bar = temperature_bar_create(container, use_style, animate);
-        ui_btn = temperature_fetch_btn_create(container);
+    if (lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        if (!ui_bar) {
+            ui_bar = temperature_bar_create(container, use_style, animate);
+            ui_btn = temperature_fetch_btn_create(container);
+        }
+        _lock_release(lvgl_lock);
     }
-    lv_unlock();
 }
+
+// void temperature_flex_bar_init(lv_display_t *disp, _lock_t *lock) {
+//     lv_obj_t *scr = lv_display_get_screen_active(disp);
+//
+//     lv_area_t ar;
+//     lv_obj_get_coords(scr, &ar);
+//     int32_t screen_w = ar.x2;
+//     int32_t screen_h = ar.y2;
+//
+//     lv_obj_t *cont_col_1 = lv_obj_create(scr);
+//     lv_obj_set_size(cont_col_1, 3 * screen_w / 4, screen_h);
+//     lv_obj_align(cont_col_1, LV_ALIGN_LEFT_MID, 0, 0);
+//     lv_obj_set_flex_flow(cont_col_1, LV_FLEX_FLOW_COLUMN);
+//     lv_obj_set_flex_align(cont_col_1, LV_FLEX_ALIGN_CENTER,
+//                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+//
+//     lv_obj_t *cont_col_2 = lv_obj_create(scr);
+//     lv_obj_set_size(cont_col_2, screen_w / 4, screen_h);
+//     lv_obj_align(cont_col_2, LV_ALIGN_RIGHT_MID, 0, 0);
+//     lv_obj_set_flex_flow(cont_col_2, LV_FLEX_FLOW_COLUMN);
+//     lv_obj_set_flex_align(cont_col_2, LV_FLEX_ALIGN_CENTER,
+//                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+//
+//     static lv_style_t style;
+//     init_style(&style);
+//
+//     lv_obj_t *b1 = create_bar(cont_col_1, &style);
+//     lv_obj_t *b2 = create_bar(cont_col_2, &style);
+//
+//     set_animation(b1);
+//     set_animation(b2);
+// }
+//
+//
+    // for (i = 0; i < 10; i++) {
+    //     lv_obj_t *obj;
+    //     lv_obj_t *label;
+    //
+    //     /*Add items to the row*/
+    //     obj = lv_button_create(cont_row);
+    //     lv_obj_set_size(obj, 100, LV_PCT(100));
+    //
+    //     label = lv_label_create(obj);
+    //     lv_label_set_text_fmt(label, "Item: %" LV_PRIu32 "", i);
+    //     lv_obj_center(label);
+    //
+    //     /*Add items to the column*/
+    //     obj = lv_button_create(cont_col_1);
+    //     lv_obj_set_size(obj, LV_PCT(100), LV_SIZE_CONTENT);
+    //
+    //     label = lv_label_create(obj);
+    //     lv_label_set_text_fmt(label, "Item: %" LV_PRIu32, i);
+    //     lv_obj_center(label);
+    // }

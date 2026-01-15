@@ -3,8 +3,9 @@
 #include "esp_log.h"
 #include "misc/lv_color.h"
 
-static const char *TAG = "CAMERA_WIDGET";
+static const char* TAG = "CAMERA_WIDGET";
 
+static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *cam_image = NULL;
 static lv_image_dsc_t img_dsc = {0};
 static lv_obj_t *shutter_btn = NULL;
@@ -49,9 +50,8 @@ static void update_camera_feed(uint8_t *buf, size_t len) {
     size_t expected_len = w * h * 2; // RGB565 = 16 bits per pixel
 
     if (len != expected_len) {
-        ESP_LOGE(TAG,
-                 "buf size does not match display size, expect UI corruption");
-        // return;
+        ESP_LOGE(TAG, "buf size does not match display size, expect UI corruption");
+        // return; 
     }
 
     img_dsc.header.w = w;
@@ -64,25 +64,29 @@ static void update_camera_feed(uint8_t *buf, size_t len) {
 }
 
 void camera_widget_set_feed(uint8_t *buf, size_t len) {
-    if (buf && len > 0 && cam_image) {
-        lv_lock();
+    if (buf && len > 0 && cam_image && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
         update_camera_feed(buf, len);
-        lv_unlock();
+        _lock_release(lvgl_lock);
     }
 }
 
-void camera_widget_init(lv_display_t *disp) {
+void camera_widget_init(lv_display_t *disp, _lock_t *lock) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
-    camera_widget_init_on_container(scr);
+    camera_widget_init_on_container(scr, lock);
 }
 
-void camera_widget_init_on_container(lv_obj_t *container) {
-    lv_lock();
-    if (!cam_image) {
-        cam_image = image_create(container);
-        shutter_btn = shutter_btn_create(container);
-        shutter_lbl = shutter_lbl_create(container);
+void camera_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
+    lvgl_lock = lock;
+
+    if (lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        if (!cam_image) {
+            cam_image = image_create(container);
+            shutter_btn = shutter_btn_create(container);
+            shutter_lbl = shutter_lbl_create(container);
+        }
+        _lock_release(lvgl_lock);
     }
-    lv_unlock();
 }

@@ -6,8 +6,8 @@
 #include "network_events.h"
 #include "lvgl.h"
 
-void tardis_widget_init(lv_display_t *disp);
-void tardis_widget_init_on_container(lv_obj_t *container);
+void tardis_widget_init(lv_display_t *disp, _lock_t *lock);
+void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock);
 
 void tardis_widget_set_notif_txt(const char *notif);
 

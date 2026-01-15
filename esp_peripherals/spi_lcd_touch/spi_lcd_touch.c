@@ -121,6 +121,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 
 // LVGL library is not thread-safe, this example will call LVGL APIs from
 // different tasks, so use a mutex to protect it
+static _lock_t lvgl_api_lock;
 static esp_lcd_panel_io_handle_t io_handle = NULL;
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
@@ -252,9 +253,9 @@ static void lvgl_port_task(void *arg) {
     ESP_LOGI(TAG, "Starting LVGL task");
     uint32_t time_till_next_ms = 0;
     while (1) {
-        lv_lock();
+        _lock_acquire(&lvgl_api_lock);
         time_till_next_ms = lv_timer_handler();
-        lv_unlock();
+        _lock_release(&lvgl_api_lock);
 
         // in case of triggering a task watch dog time out
         time_till_next_ms = MAX(time_till_next_ms, LVGL_TASK_MIN_DELAY_MS);
@@ -486,6 +487,14 @@ void lcd_init_task(void *pvParameters) {
     display_initialized = true;
 
     vTaskDelete(NULL);
+}
+
+_lock_t *spi_lcd_get_lvgl_lock(void) {
+    if (!display_initialized) {
+        return NULL;
+    }
+
+    return &lvgl_api_lock;
 }
 
 lv_display_t *spi_lcd_get_display(void) {

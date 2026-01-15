@@ -16,6 +16,7 @@
 
 #define ANIM_DURATION 2000
 
+static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *sender_txt = NULL;
 static lv_obj_t *recipient_txt = NULL;
 static lv_obj_t *message_id_txt = NULL;
@@ -113,34 +114,34 @@ static lv_obj_t *create_message_id_txt(lv_obj_t *container) {
 }
 
 void lora_sndr_widget_set_message_id_txt(const char *id) {
-    if (message_id_txt) {
-        lv_lock();
+    if (message_id_txt && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
         lv_label_set_text(message_id_txt, id);
-        lv_unlock();
+        _lock_release(lvgl_lock);
     }
 }
 
 void lora_sndr_widget_set_message_txt(const char *txt) {
-    if (message_txt) {
-        lv_lock();
+    if (message_txt && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
         lv_label_set_text(message_txt, txt);
-        lv_unlock();
+        _lock_release(lvgl_lock);
     }
 }
 
 void lora_sndr_widget_set_sender_txt(const char *sender) {
-    if (sender_txt) {
-        lv_lock();
+    if (sender_txt && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
         lv_label_set_text(sender_txt, sender);
-        lv_unlock();
+        _lock_release(lvgl_lock);
     }
 }
 
 void lora_sndr_widget_set_recipient_txt(const char *recipient) {
-    if (recipient_txt) {
-        lv_lock();
+    if (recipient_txt && lvgl_lock) {
+        _lock_acquire(lvgl_lock);
         lv_label_set_text(recipient_txt, recipient);
-        lv_unlock();
+        _lock_release(lvgl_lock);
     }
 }
 
@@ -166,35 +167,39 @@ void lora_sndr_widget_send_transmission(event_t *e) {
     lora_sndr_widget_set_message_txt(payload_str);
 }
 
-void lora_sndr_widget_init(lv_display_t *disp) {
+void lora_sndr_widget_init(lv_display_t *disp, _lock_t *lock) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
-    lora_sndr_widget_init_on_container(scr);
+    lora_sndr_widget_init_on_container(scr, lock);
 }
 
-void lora_sndr_widget_init_on_container(lv_obj_t *container) {
-    lv_lock();
-    lv_obj_t *bars_container = lv_obj_create(container);
-    lv_obj_remove_style_all(bars_container);
-    lv_obj_set_size(bars_container, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_align(bars_container, LV_ALIGN_LEFT_MID, 10, 0);
+void lora_sndr_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
+    lvgl_lock = lock;
 
-    lv_obj_set_flex_flow(bars_container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(bars_container, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(bars_container, 5, 0);
+    if (lvgl_lock) {
+        _lock_acquire(lvgl_lock);
+        lv_obj_t *bars_container = lv_obj_create(container);
+        lv_obj_remove_style_all(bars_container);
+        lv_obj_set_size(bars_container, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(bars_container, LV_ALIGN_LEFT_MID, 10, 0);
 
-    if (!sender_txt) {
-        sender_txt = create_sender_txt(bars_container);
+        lv_obj_set_flex_flow(bars_container, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(bars_container, LV_FLEX_ALIGN_START,
+                              LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_style_pad_gap(bars_container, 5, 0);
+
+        if (!sender_txt) {
+            sender_txt = create_sender_txt(bars_container);
+        }
+        if (!recipient_txt) {
+            recipient_txt = create_recipient_txt(bars_container);
+        }
+        if (!message_id_txt) {
+            message_id_txt = create_message_id_txt(bars_container);
+        }
+        if (!message_txt) {
+            message_txt = create_message_txt(bars_container);
+        }
+        _lock_release(lvgl_lock);
     }
-    if (!recipient_txt) {
-        recipient_txt = create_recipient_txt(bars_container);
-    }
-    if (!message_id_txt) {
-        message_id_txt = create_message_id_txt(bars_container);
-    }
-    if (!message_txt) {
-        message_txt = create_message_txt(bars_container);
-    }
-    lv_unlock();
 }
