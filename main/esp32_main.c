@@ -10,7 +10,7 @@
 #include "platform.h"
 
 #include "lora.h"
-// #include "esp_lora.h"
+#include "sx126x.h"
 #include "i2c_hal.h"
 #include "sd_card.h"
 #include "spi_hal.h"
@@ -35,9 +35,10 @@
 static const char *TAG = "ESP32_MAIN";
 
 void init_peripherals(void) {
-
     spi_hal_master_init();
-    if (LoRa_init()) {
+    
+    lora_radio_t *r = lora_create_sx126x_radio();
+    if (lora_init(r)) {
         ESP_LOGI(TAG, "SUCCESS");
     } else {
         ESP_LOGE(TAG, "FUCK");
