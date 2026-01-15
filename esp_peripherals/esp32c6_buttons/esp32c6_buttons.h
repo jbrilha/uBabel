@@ -1,0 +1,15 @@
+#ifndef ESP32C6_BUTTONS_H
+#define ESP32C6_BUTTONS_H
+
+#define EVENT_ESP32C6_UP_PRESSED (300)
+#define EVENT_ESP32C6_RIGHT_PRESSED (301)
+#define EVENT_ESP32C6_DOWN_PRESSED (302)
+#define EVENT_ESP32C6_LEFT_PRESSED (303)
+
+#define EVENT_ESP32C6_A_PRESSED (304)
+#define EVENT_ESP32C6_B_PRESSED (305)
+
+void esp32c6_buttons_init(void);
+void run_esp32c6_buttons_task(void);
+
+#endif // !ESP32C6_BUTTONS_H

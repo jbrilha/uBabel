@@ -27,52 +27,44 @@ void ui_manager_init(void) {
 
 void ui_manager_set_lora_rec_widget() {
     lv_display_t *display;
-    _lock_t *lvgl_lock;
 
-    if ((display = spi_lcd_get_display()) == NULL ||
-        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+    if ((display = spi_lcd_get_display()) == NULL) {
         return;
     }
 
-    lora_rec_widget_init(display, lvgl_lock);
+    lora_rec_widget_init(display);
 }
 
 void ui_manager_set_lora_sndr_widget() {
     lv_display_t *display;
-    _lock_t *lvgl_lock;
 
-    if ((display = spi_lcd_get_display()) == NULL ||
-        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+    if ((display = spi_lcd_get_display()) == NULL) {
         return;
     }
 
-    lora_sndr_widget_init(display, lvgl_lock);
+    lora_sndr_widget_init(display);
 }
 
 void ui_manager_set_temperature_widget() {
     lv_display_t *display;
-    _lock_t *lvgl_lock;
 
-    if ((display = spi_lcd_get_display()) == NULL ||
-        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+    if ((display = spi_lcd_get_display()) == NULL) {
         return;
     }
 
-    temperature_widget_init(display, lvgl_lock, true, true);
+    temperature_widget_init(display, true, true);
 }
 
 void ui_manager_set_messenger_widget() {
     lv_display_t *display;
-    _lock_t *lvgl_lock;
 
-    if ((display = spi_lcd_get_display()) == NULL ||
-        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+    if ((display = spi_lcd_get_display()) == NULL) {
         return;
     }
 
-    lvgl_flex_layout_init(display, lvgl_lock);
-    messenger_widget_init_on_container(lvgl_flex_layout_get_col(0), lvgl_lock);
-    temperature_widget_init_on_container(lvgl_flex_layout_get_col(1), lvgl_lock,
+    lvgl_flex_layout_init(display);
+    messenger_widget_init_on_container(lvgl_flex_layout_get_col(0));
+    temperature_widget_init_on_container(lvgl_flex_layout_get_col(1),
                                          true, true);
 }
 
@@ -80,14 +72,12 @@ static bool tardis_initialized = false;
 
 void ui_manager_set_tardis_widget() {
     lv_display_t *display;
-    _lock_t *lvgl_lock;
 
-    if ((display = spi_lcd_get_display()) == NULL ||
-        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+    if ((display = spi_lcd_get_display()) == NULL) {
         return;
     }
 
-    tardis_widget_init(display, lvgl_lock);
+    tardis_widget_init(display);
 
     tardis_initialized = true;
 }
@@ -101,13 +91,11 @@ void ui_manager_update_tardis_widget() {
 
 void ui_manager_set_camera_widget() {
     lv_display_t *display;
-    _lock_t *lvgl_lock;
 
-    if ((display = spi_lcd_get_display()) == NULL ||
-        (lvgl_lock = spi_lcd_get_lvgl_lock()) == NULL) {
+    if ((display = spi_lcd_get_display()) == NULL) {
         return;
     }
 
-    camera_widget_init(display, lvgl_lock);
+    camera_widget_init(display);
 }
 

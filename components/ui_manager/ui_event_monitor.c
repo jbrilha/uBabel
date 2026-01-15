@@ -9,7 +9,8 @@
 #include "lvgl_ui.h"
 #include "network_events.h"
 
-#ifdef M5STACK_CORE_BASIC
+#ifdef BUILD_ESP32
+#include "esp32c6_buttons.h"
 #include "m5_buttons.h"
 #endif
 #include "platform.h"
@@ -84,7 +85,9 @@ static void ui_event_monitor_task(void *pvParameters) {
             default:
                 break;
             }
+            taskYIELD();
         }
+        taskYIELD();
     }
 
     vTaskDelete(NULL);
@@ -100,6 +103,13 @@ void ui_event_monitor_init(void) {
                               EVENT_M5_BUTTON_B_PRESSED);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_M5_BUTTON_C_PRESSED);
+#elif CONFIG_IDF_TARGET_ESP32C6
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              EVENT_ESP32C6_B_PRESSED);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              EVENT_ESP32C6_UP_PRESSED);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              EVENT_ESP32C6_DOWN_PRESSED);
 #endif
 
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
@@ -117,7 +127,7 @@ void ui_event_monitor_init(void) {
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_REQUEST,
                               REQUEST_REFRESH_MENU);
 
-    xTaskCreate(ui_event_monitor_task, "UI_EVENT_MONITOR_TASK",
+    xTaskCreate(ui_event_monitor_task, "UI_EVENT_MON",
                 UI_MONITOR_TASK_STACK_SIZE, NULL, UI_MONITOR_TASK_PRIORITY,
                 NULL);
 
@@ -176,15 +186,18 @@ static void handle_ui_notif(event_t *e) {
         tardis_widget_set_notif_txt(text);
         break;
     }
-#ifdef M5STACK_CORE_BASIC
+#ifdef BUILD_ESP32
+    case EVENT_ESP32C6_UP_PRESSED:
     case EVENT_M5_BUTTON_A_PRESSED: {
         tardis_widget_menu_prev();
         break;
     }
+    case EVENT_ESP32C6_B_PRESSED:
     case EVENT_M5_BUTTON_B_PRESSED: {
         tardis_widget_menu_select();
         break;
     }
+    case EVENT_ESP32C6_DOWN_PRESSED:
     case EVENT_M5_BUTTON_C_PRESSED: {
         tardis_widget_menu_next();
         break;
@@ -205,7 +218,7 @@ static void handle_ui_request(event_t *e) {
         memcpy(text, e->payload, strlen((char *)e->payload));
         puts(text);
         tardis_widget_set_notif_txt(text);
-    }
+    } break;
     case REQUEST_REFRESH_MENU: {
         tardis_widget_populate_menu();
         break;
