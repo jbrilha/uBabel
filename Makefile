@@ -66,6 +66,9 @@ menu: menuconfig
 menuconfig:
 	idf.py -B $(ESP32_BUILD_DIR) menuconfig
 
+erase-flash:
+	idf.py -B $(ESP32_BUILD_DIR) erase-flash
+
 target-esp32:
 	idf.py -B $(ESP32_BUILD_DIR) set-target esp32
 
