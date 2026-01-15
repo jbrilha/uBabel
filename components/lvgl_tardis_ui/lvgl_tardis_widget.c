@@ -10,7 +10,6 @@ static const char *TAG = "TaRDIS Widget";
 static const char *NOT_CONNECTED = "Not connected";
 static const char *NO_IP = "0.0.0.0";
 
-static _lock_t *lvgl_lock = NULL;
 static lv_obj_t *notif_box = NULL;
 static lv_obj_t *network_box = NULL;
 static lv_obj_t *menu = NULL;
@@ -29,7 +28,6 @@ static void apply_focus_style(lv_obj_t *obj, uint32_t color) {
     lv_obj_set_style_bg_color(obj, lv_palette_main(color), LV_STATE_FOCUSED);
 }
 
-#if M5STACK_CORE_BASIC
 static lv_group_t *input_group = NULL;
 
 static void menu_page_changed_cb(lv_event_t *e) {
@@ -67,32 +65,31 @@ static lv_group_t *tardis_widget_init_input_group(void) {
 }
 
 void tardis_widget_menu_next(void) {
-    if (input_group && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+    if (input_group) {
+        lv_lock();
         lv_group_focus_next(input_group);
-        _lock_release(lvgl_lock);
+        lv_unlock();
     }
 }
 
 void tardis_widget_menu_prev(void) {
-    if (input_group && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+    if (input_group) {
+        lv_lock();
         lv_group_focus_prev(input_group);
-        _lock_release(lvgl_lock);
+        lv_unlock();
     }
 }
 
 void tardis_widget_menu_select(void) {
-    if (input_group && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+    if (input_group) {
+        lv_lock();
         lv_obj_t *focused = lv_group_get_focused(input_group);
         if (focused) {
             lv_obj_send_event(focused, LV_EVENT_CLICKED, NULL);
         }
-        _lock_release(lvgl_lock);
+        lv_unlock();
     }
 }
-#endif
 
 static void parameter_clicked(lv_event_t *e) {
     menu_item_context_t *ctx = (menu_item_context_t *)lv_event_get_user_data(e);
@@ -236,11 +233,9 @@ lv_obj_t *populate_menu(lv_obj_t *menu, device_t *device_info,
                         node_snapshot_t *nodes, int node_count) {
     lv_obj_t *main_page = (lv_obj_t *)lv_obj_get_user_data(menu);
 
-#ifdef M5STACK_CORE_BASIC
     if (input_group) {
         lv_group_remove_all_objs(input_group);
     }
-#endif
 
     create_shared_device_page(menu, device_info);
 
@@ -259,14 +254,10 @@ void tardis_widget_populate_menu(void) {
         node_snapshot_t *nodes = NULL;
         int node_count = get_nodes_snapshot(&nodes);
 
-        if (lvgl_lock) {
-            _lock_acquire(lvgl_lock);
-            populate_menu(menu, device_info, nodes, node_count);
-#ifdef M5STACK_CORE_BASIC
-            lv_obj_send_event(menu, LV_EVENT_VALUE_CHANGED, NULL);
-#endif
-            _lock_release(lvgl_lock);
-        }
+        lv_lock();
+        populate_menu(menu, device_info, nodes, node_count);
+        lv_obj_send_event(menu, LV_EVENT_VALUE_CHANGED, NULL);
+        lv_unlock();
 
         for (int i = 0; i < node_count; i++) {
             free(nodes[i].devices);
@@ -341,8 +332,8 @@ static lv_obj_t *create_network_box(lv_obj_t *container) {
 }
 
 void tardis_widget_set_network_up_info(network_event_t *e) {
-    if (network_box && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+    if (network_box) {
+        lv_lock();
 
         lv_obj_t *text_container = lv_obj_get_child(network_box, 1);
 
@@ -355,13 +346,13 @@ void tardis_widget_set_network_up_info(network_event_t *e) {
         lv_obj_set_style_border_color(network_label, lv_color_hex(0x80ff80), 0);
         lv_obj_set_style_border_color(ip_label, lv_color_hex(0x80ff80), 0);
 
-        _lock_release(lvgl_lock);
+        lv_unlock();
     }
 }
 
 void tardis_widget_set_network_down(void) {
-    if (network_box && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+    if (network_box) {
+        lv_lock();
         lv_obj_t *text_container = lv_obj_get_child(network_box, 1);
 
         lv_obj_t *network_label = lv_obj_get_child(text_container, 0);
@@ -372,69 +363,63 @@ void tardis_widget_set_network_down(void) {
 
         lv_obj_set_style_border_color(network_label, lv_color_hex(0xff8080), 0);
         lv_obj_set_style_border_color(ip_label, lv_color_hex(0xff8080), 0);
-        _lock_release(lvgl_lock);
+        lv_unlock();
     }
 }
 
 void tardis_widget_set_notif_txt(const char *notif) {
-    if (notif_box && lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+    if (notif_box) {
+        lv_lock();
         // second child, based on creation order!!
         lv_obj_t *notif_label = lv_obj_get_child(notif_box, 1);
         lv_label_set_text_fmt(notif_label, "%s%s", notif, SEP);
-        _lock_release(lvgl_lock);
+        lv_unlock();
     }
 }
 
-void tardis_widget_init(lv_display_t *disp, _lock_t *lock) {
+void tardis_widget_init(lv_display_t *disp) {
     lv_obj_t *scr = lv_display_get_screen_active(disp);
 
-    tardis_widget_init_on_container(scr, lock);
+    tardis_widget_init_on_container(scr);
 }
 
-void tardis_widget_init_on_container(lv_obj_t *container, _lock_t *lock) {
-    lvgl_lock = lock;
+void tardis_widget_init_on_container(lv_obj_t *container) {
+    lv_lock();
 
-    if (lvgl_lock) {
-        _lock_acquire(lvgl_lock);
+    lv_obj_t *col_box = lv_obj_create(container);
+    lv_obj_remove_style_all(col_box);
+    lv_obj_set_size(col_box, lv_obj_get_width(container),
+                    lv_obj_get_height(container));
 
-        lv_obj_t *col_box = lv_obj_create(container);
-        lv_obj_remove_style_all(col_box);
-        lv_obj_set_size(col_box, lv_obj_get_width(container),
-                        lv_obj_get_height(container));
+    lv_obj_set_flex_flow(col_box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START);
 
-        lv_obj_set_flex_flow(col_box, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(col_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
-                              LV_FLEX_ALIGN_START);
+    if (!menu) {
+        menu = lv_menu_create(col_box);
+        lv_obj_set_flex_grow(menu, 1);
+        lv_obj_center(menu);
 
-        if (!menu) {
-            menu = lv_menu_create(col_box);
-            lv_obj_set_flex_grow(menu, 1);
-            lv_obj_center(menu);
+        lv_obj_set_width(menu, lv_pct(100));
 
-            lv_obj_set_width(menu, lv_pct(100));
+        // empty main page, set later once a node is detected
+        lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
+        lv_menu_set_page(menu, main_page);
 
-            // empty main page, set later once a node is detected
-            lv_obj_t *main_page = lv_menu_page_create(menu, NULL);
-            lv_menu_set_page(menu, main_page);
+        lv_obj_set_user_data(menu, main_page);
 
-            lv_obj_set_user_data(menu, main_page);
-
-#ifdef M5STACK_CORE_BASIC
-            input_group = tardis_widget_init_input_group();
-            lv_obj_add_event_cb(menu, menu_page_changed_cb,
-                                LV_EVENT_VALUE_CHANGED, NULL);
-#endif
-        }
-
-        if (!network_box) {
-            network_box = create_network_box(col_box);
-        }
-
-        if (!notif_box) {
-            notif_box = create_notif_box(col_box);
-        }
-
-        _lock_release(lvgl_lock);
+        input_group = tardis_widget_init_input_group();
+        lv_obj_add_event_cb(menu, menu_page_changed_cb, LV_EVENT_VALUE_CHANGED,
+                            NULL);
     }
+
+    if (!network_box) {
+        network_box = create_network_box(col_box);
+    }
+
+    if (!notif_box) {
+        notif_box = create_notif_box(col_box);
+    }
+
+    lv_unlock();
 }

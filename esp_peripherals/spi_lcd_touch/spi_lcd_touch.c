@@ -98,7 +98,6 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_CS_PIN 2
 #define LCD_DC_PIN 4
 #define LCD_RST_PIN 3
-#define LCD_BL_PIN 8
 
 #define TOUCH_CS_PIN 12
 #endif
@@ -117,7 +116,6 @@ static const char *TAG = "SPI_LCD_TOUCH";
 
 // LVGL library is not thread-safe, this example will call LVGL APIs from
 // different tasks, so use a mutex to protect it
-static _lock_t lvgl_api_lock;
 static esp_lcd_panel_io_handle_t io_handle = NULL;
 static esp_lcd_panel_handle_t panel_handle = NULL;
 static lv_display_t *display = NULL;
@@ -250,14 +248,15 @@ static void lvgl_port_task(void *arg) {
     ESP_LOGI(TAG, "Starting LVGL task");
     uint32_t time_till_next_ms = 0;
     while (1) {
-        _lock_acquire(&lvgl_api_lock);
+        lv_lock();
         time_till_next_ms = lv_timer_handler();
-        _lock_release(&lvgl_api_lock);
+        lv_unlock();
+
         // in case of triggering a task watch dog time out
         time_till_next_ms = MAX(time_till_next_ms, LVGL_TASK_MIN_DELAY_MS);
         // in case of lvgl display not ready yet
         time_till_next_ms = MIN(time_till_next_ms, LVGL_TASK_MAX_DELAY_MS);
-        usleep(1000 * time_till_next_ms);
+        vTaskDelay(pdMS_TO_TICKS(time_till_next_ms));
     }
 }
 
@@ -440,16 +439,20 @@ void init_touch() {
 #endif
 
 void lcd_init_task(void *pvParameters) {
+#ifndef CONFIG_IDF_TARGET_ESP32C6
     ESP_LOGI(TAG, "Turn off LCD backlight");
     gpio_config_t bk_gpio_config = {.mode = GPIO_MODE_OUTPUT,
                                     .pin_bit_mask = 1ULL << LCD_BL_PIN};
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
+#endif
 
     ESP_LOGI(TAG, "Install panel IO");
     init_display();
 
+#ifndef CONFIG_IDF_TARGET_ESP32C6
     ESP_LOGI(TAG, "Turn on LCD backlight");
     gpio_set_level(LCD_BL_PIN, LCD_BK_LIGHT_ON_LEVEL);
+#endif
 
     ESP_LOGI(TAG, "Initialize LVGL library");
     init_lvgl();
@@ -479,14 +482,6 @@ void lcd_init_task(void *pvParameters) {
     display_initialized = true;
 
     vTaskDelete(NULL);
-}
-
-_lock_t *spi_lcd_get_lvgl_lock(void) {
-    if (!display_initialized) {
-        return NULL;
-    }
-
-    return &lvgl_api_lock;
 }
 
 lv_display_t *spi_lcd_get_display(void) {
