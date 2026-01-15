@@ -166,7 +166,7 @@ static void sx126x_check_busy(sx126x_t *r) {
 
         if (counter > 10) {
             sx126x_reset_device(r);
-            sx126x_set_mode(r, 1234);
+            sx126x_set_mode(r, 123);
             sx126x_apply_config(r);
             break;
         }
