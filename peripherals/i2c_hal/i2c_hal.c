@@ -5,13 +5,13 @@
 
 #if BUILD_ESP32
 
-#define I2C_FREQ_HZ (400 * 1000)
+#define I2C_FREQ_HZ (200 * 1000)
 
 #if CONFIG_IDF_TARGET_ESP32
 #define SDA_PIN 21
 #define SCL_PIN 22
 #else // the C6 has these specific pins but the S3 can use whichever ones
-#define SDA_PIN 6
+#define SDA_PIN 8
 #define SCL_PIN 7
 #endif
 
