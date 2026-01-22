@@ -16,26 +16,22 @@ pico:
 
 esp32:
 	@echo "Building for ESP32..."
-	cp sdkconfig.esp32_defaults sdkconfig.esp32
 	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 m5core:
 	@echo "Building for M5Stack Core Basic..."
-	cp sdkconfig.m5core sdkconfig.esp32
 	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 m5core-sender:
 	@echo "Building for M5Stack Core Basic..."
-	cp sdkconfig.m5core sdkconfig.esp32
-	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_SENDER=1 build
+	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_SENDER=1 -DM5STACK_RECEIVER=0 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 m5core-receiver:
 	@echo "Building for M5Stack Core Basic..."
-	cp sdkconfig.m5core sdkconfig.esp32
-	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_RECEIVER=1 build
+	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_SENDER=0 -DM5STACK_RECEIVER=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 
@@ -72,8 +68,13 @@ erase-flash:
 target-esp32:
 	idf.py -B $(ESP32_BUILD_DIR) set-target esp32
 
+target-m5core:
+	idf.py -B $(ESP32_BUILD_DIR) set-target esp32
+	cp sdkconfig.m5core sdkconfig
+
 target-esp32s3:
 	idf.py -B $(ESP32_BUILD_DIR) set-target esp32s3
 
 target-esp32c6:
 	idf.py -B $(ESP32_BUILD_DIR) set-target esp32c6
+	cp sdkconfig.esp32c6 sdkconfig
