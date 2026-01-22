@@ -4,7 +4,6 @@
 #include <sys/param.h>
 #include <unistd.h>
 
-#include "driver/gpio.h"
 #include "gpio_hal.h"
 #include "spi_hal.h"
 
@@ -473,11 +472,11 @@ spi_dev_cfg_t spi_hal_create_config(int cs_pin, uint32_t clock_speed_hz,
     cfg.spics_io_num = cs_pin;
     cfg.clock_speed_hz = clock_speed_hz;
     cfg.mode = mode;
+    cfg.command_bits = 0;
+    cfg.address_bits = 8;
 
 #if BUILD_ESP32
     cfg.queue_size = 7;
-    cfg.command_bits = 0;
-    cfg.address_bits = 8;
     cfg.dummy_bits = 0;
     cfg.flags = 0;
 #endif

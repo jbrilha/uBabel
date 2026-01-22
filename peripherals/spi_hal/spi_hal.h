@@ -33,6 +33,8 @@ typedef struct {
     uint spics_io_num;
     uint clock_speed_hz;
     uint8_t mode;
+    uint8_t command_bits;
+    uint8_t address_bits;
 } pico_spi_dev_cfg_t;
 
 typedef pico_spi_dev_cfg_t spi_dev_cfg_t;
