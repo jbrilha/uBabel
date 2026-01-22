@@ -10,6 +10,9 @@
 #if CONFIG_IDF_TARGET_ESP32
 #define SDA_PIN 21
 #define SCL_PIN 22
+#elif CONFIG_IDF_TARGET_ESP32S3
+#define SDA_PIN 17
+#define SCL_PIN 18
 #else // the C6 has these specific pins but the S3 can use whichever ones
 #define SDA_PIN 8
 #define SCL_PIN 7
