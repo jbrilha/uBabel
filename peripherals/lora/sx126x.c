@@ -6,14 +6,14 @@
 #include "sx126x_defs.h"
 
 #if CONFIG_IDF_TARGET_ESP32S3
-#define CS_PIN (11)
-#define RST_PIN (12)
-#define BUSY_PIN (4)
-#define DIO1_PIN (6)
-#define RXEN_PIN (1)
-#define TXEN_PIN (2)
+#define CS_PIN (8)
+#define RST_PIN (2)
+#define BUSY_PIN (13)
+#define DIO1_PIN (9)
+#define RXEN_PIN (11)
+#define TXEN_PIN (12)
 #elif CONFIG_IDF_TARGET_ESP32C6
-#define CS_PIN (9)
+#define CS_PIN (0)
 #define RST_PIN (1)
 #define BUSY_PIN (20)
 #define DIO1_PIN (14)
@@ -48,34 +48,47 @@ static void sx126x_apply_config(sx126x_t *r);
 static void sx126x_check_busy(sx126x_t *r);
 static void sx126x_reset_device(sx126x_t *r);
 
-static void sx126x_write_register_bytes(sx126x_t *c, uint16_t address,
+static void sx126x_write_register_bytes(sx126x_t *c, uint16_t addr,
                                         uint8_t *buf, uint16_t len) {
-    uint8_t tx_buf[2 + len];
-    tx_buf[0] = address >> 8;   // MSB
-    tx_buf[1] = address & 0xFF; // LSB
-    memcpy(&tx_buf[2], buf, len);
+    // uint8_t tx_buf[2 + len];
+    // tx_buf[0] = address >> 8;   // MSB
+    // tx_buf[1] = address & 0xFF; // LSB
+    // memcpy(&tx_buf[2], buf, len);
 
-    if (!spi_hal_write_register(c->spi_dev, RADIO_WRITE_REGISTER, tx_buf,
-                                2 + len)) {
-        ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI VAL TO ADDR %d", address);
+    if (!spi_hal_write_register_cmd_addr(c->spi_dev, RADIO_WRITE_REGISTER, addr,
+                                         buf, len)) {
+        ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI VAL TO ADDR %d", addr);
     }
+    // if (!spi_hal_write_register(c->spi_dev, RADIO_WRITE_REGISTER, tx_buf,
+    //                             2 + len)) {
+    //     ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI VAL TO ADDR %d", address);
+    // }
 }
 
 static void write_register(sx126x_t *c, uint16_t address, uint8_t value) {
     return sx126x_write_register_bytes(c, address, &value, 1);
 }
 
-static void sx126x_read_register_bytes(sx126x_t *c, uint16_t address,
-                                       uint8_t *buf, uint16_t len) {
-    uint8_t rx_buf[3] = {
-        address >> 8,     // MSB
-        address & 0x00FF, // LSB
-        0xFF              // NOP
-    };
+static void sx126x_read_register_bytes(sx126x_t *c, uint16_t addr, uint8_t *buf,
+                                       uint16_t len) {
+    uint8_t tx_buf[1 + len];
+    // tx_buf[0] = address >> 8;      // MSB
+    // tx_buf[1] = address & 0xFF;    // LSB
+    tx_buf[0] = 0xFF;              // NOP
+    memset(&tx_buf[1], 0xFF, len); // rest of TX with NOPS
 
-    if (!spi_hal_read_register(c->spi_dev, RADIO_READ_REGISTER, rx_buf, 3)) {
-        ESP_LOGE(TAG, "FAILED TO READ SPI VAL FROM ADDR %d", address);
+    uint8_t rx_buf[1 + len];
+
+    if (!spi_hal_read_register_cmd_addr(c->spi_dev, RADIO_READ_REGISTER, addr,
+                                        rx_buf, tx_buf, 1 + len)) {
+        ESP_LOGE(TAG, "FAILED TO READ SPI VAL FROM ADDR %d", addr);
     }
+    // if (!spi_hal_read_register(c->spi_dev, RADIO_READ_REGISTER,
+    //                                tx_buf, 3 + len)) {
+    //     ESP_LOGE(TAG, "FAILED TO READ SPI VAL FROM ADDR %d", address);
+    // }
+
+    memcpy(buf, &rx_buf[1], len);
 }
 
 static uint8_t read_register(sx126x_t *r, uint16_t address) {
@@ -100,6 +113,8 @@ static sx126x_t *sx126x_chip_init_on_pins(int8_t cs_pin, int8_t rst_pin,
     r->txen_pin = txen_pin;
 
     spi_dev_cfg_t cfg = spi_hal_create_config(cs_pin, 8E6, 0);
+    cfg.command_bits = 8;
+    cfg.address_bits = 16;
     r->spi_dev = spi_hal_add_device(&cfg);
     if (!r->spi_dev) {
         free(r);
@@ -146,10 +161,14 @@ static void sx126x_apply_config(sx126x_t *r) {}
 static bool sx126x_check_device(sx126x_t *r) {
 
     uint8_t reg_data1, reg_data2;
+    sx126x_check_busy(r);
     reg_data1 = read_register(r, 0x88e); // frequency setting low byte
+    sx126x_check_busy(r);
     write_register(r, 0x88e, (reg_data1 + 1));
 
+    sx126x_check_busy(r);
     reg_data2 = read_register(r, 0x88e); // read changed value back
+    sx126x_check_busy(r);
     write_register(r, 0x88e, reg_data1); // restore to original value
 
     LOG_ERROR(TAG, "reg_data1: %d | reg_data2: %d", reg_data1, reg_data2);
@@ -166,8 +185,8 @@ static void sx126x_check_busy(sx126x_t *r) {
 
         if (counter > 10) {
             sx126x_reset_device(r);
-            sx126x_set_mode(r, 123);
-            sx126x_apply_config(r);
+            // sx126x_set_mode(r, 123);
+            // sx126x_apply_config(r);
             break;
         }
     }
