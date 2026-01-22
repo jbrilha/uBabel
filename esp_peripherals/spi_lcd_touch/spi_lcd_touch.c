@@ -103,7 +103,7 @@ static const char *TAG = "SPI_LCD_TOUCH";
 #define LCD_DC_PIN 4
 #define LCD_RST_PIN 3
 
-#define TOUCH_CS_PIN 12
+#define TOUCH_CS_PIN -1
 #endif
 
 // Bit number used to represent command and parameter
