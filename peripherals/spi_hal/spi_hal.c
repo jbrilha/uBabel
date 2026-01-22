@@ -4,6 +4,7 @@
 #include <sys/param.h>
 #include <unistd.h>
 
+#include "driver/gpio.h"
 #include "gpio_hal.h"
 #include "spi_hal.h"
 
@@ -21,11 +22,11 @@
 // #define SCLK_PIN 41
 // #define MOSI_PIN 42
 // THESE ARE FOR TESTING ON THE SUPERMINI
-#define MISO_PIN 5
-#define SCLK_PIN 10
-#define MOSI_PIN 9
+#define MISO_PIN 1
+#define SCLK_PIN 6
+#define MOSI_PIN 7
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
-#define MISO_PIN 0
+#define MISO_PIN 22
 #define SCLK_PIN 5
 #define MOSI_PIN 6
 #endif
@@ -134,8 +135,7 @@ spi_dev_handle_t spi_hal_add_device(spi_dev_cfg_t *dev_cfg) {
     return spi_hal_add_device_to_bus(spi_host, dev_cfg);
 }
 
-bool spi_hal_transmit(spi_dev_handle_t device, uint8_t *data,
-                      size_t len) {
+bool spi_hal_transmit(spi_dev_handle_t device, uint8_t *data, size_t len) {
 #if BUILD_ESP32
     spi_transaction_t trans = {
         .length = len * 8,
@@ -186,20 +186,132 @@ bool spi_hal_write_reg_buffer(spi_dev_handle_t device, uint8_t address,
     return false;
 }
 
+bool spi_hal_read_reg_buffer(spi_dev_handle_t device, uint8_t address,
+                             uint8_t *data, size_t len) {
+#if BUILD_ESP32
+    spi_transaction_t trans = {
+        .addr = address,
+        .rxlength = len * 8,
+        .length = len * 8,
+        .rx_buffer = data,
+        .tx_buffer = NULL,
+    };
+
+    esp_err_t err = spi_device_transmit(device, &trans);
+    return err == ESP_OK;
+#elif BUILD_PICO
+    // need to manually set the bus speed for this particular device, ESP does
+    // this automagically in device_transmit
+    spi_set_baudrate(device->spi_bus, device->freq_hz);
+
+    // manual CS select (low means slave device is listening)
+    gpio_set_pin_level(device->cs_pin, 0);
+    int ret = spi_write_blocking(device->spi_bus, data, len);
+    gpio_set_pin_level(device->cs_pin, 1);
+    return ret == len;
+#endif
+
+    return false;
+}
+
 bool spi_hal_write_register(spi_dev_handle_t device, uint8_t addr,
                             uint8_t *data, size_t len) {
 #if BUILD_ESP32
     spi_transaction_t trans = {.addr = addr,
-                               .rx_buffer = NULL,
-                               .tx_buffer = NULL,
+                               .tx_buffer = data,
                                .rxlength = len * 8,
                                .length = len * 8,
-                               .flags = SPI_TRANS_USE_TXDATA};
-    for (int i = 0; i < len; i++) {
-        trans.tx_data[i] = data[i];
-    }
+                               .flags = 0};
     esp_err_t err = spi_device_polling_transmit(device, &trans);
     return err == ESP_OK;
+#elif BUILD_PICO
+    LOG_ERROR(TAG, "NOT IMPLEMENTED");
+    return false;
+#endif
+
+    return false;
+}
+
+bool spi_hal_write_register_cmd(spi_dev_handle_t device, uint8_t cmd,
+                                uint8_t *data, size_t len) {
+#if BUILD_ESP32
+    spi_transaction_t trans = {.cmd = cmd,
+                               .tx_buffer = data,
+                               .rxlength = len * 8,
+                               .length = len * 8,
+                               .flags = 0};
+    esp_err_t err = spi_device_polling_transmit(device, &trans);
+    return err == ESP_OK;
+#elif BUILD_PICO
+    LOG_ERROR(TAG, "NOT IMPLEMENTED");
+    return false;
+#endif
+
+    return false;
+}
+
+bool spi_hal_write_register_cmd_addr(spi_dev_handle_t device, uint8_t cmd,
+                                     uint16_t addr, uint8_t *data, size_t len) {
+#if BUILD_ESP32
+    spi_transaction_t trans = {.cmd = cmd,
+                               .addr = addr,
+                               .tx_buffer = data,
+                               .rxlength = len * 8,
+                               .length = len * 8,
+                               .flags = 0};
+    esp_err_t err = spi_device_polling_transmit(device, &trans);
+    return err == ESP_OK;
+#elif BUILD_PICO
+    LOG_ERROR(TAG, "NOT IMPLEMENTED");
+    return false;
+#endif
+
+    return false;
+}
+
+bool spi_hal_read_register_cmd_addr(spi_dev_handle_t device, uint8_t cmd,
+                                    uint16_t addr, uint8_t *rx_data,
+                                    uint8_t *tx_data, size_t len) {
+
+#if BUILD_ESP32
+    spi_transaction_t trans = {.cmd = cmd,
+                               .addr = addr,
+                               .rx_buffer = rx_data,
+                               .tx_buffer = tx_data,
+                               .rxlength = len * 8,
+                               .length = len * 8,
+                               .flags = 0};
+    esp_err_t err = spi_device_polling_transmit(device, &trans);
+    if (err != ESP_OK) {
+        LOG_ERROR(TAG, "Failed to do polling transmit");
+        return false;
+    }
+    return true;
+#elif BUILD_PICO
+    LOG_ERROR(TAG, "NOT IMPLEMENTED");
+    return false;
+#endif
+
+    return false;
+}
+
+// TODO rename this
+bool spi_hal_read_register_cmd(spi_dev_handle_t device, uint8_t cmd,
+                               uint8_t *rx_data, uint8_t *tx_data, size_t len) {
+
+#if BUILD_ESP32
+    spi_transaction_t trans = {.cmd = cmd,
+                               .rx_buffer = rx_data,
+                               .tx_buffer = tx_data,
+                               .rxlength = len * 8,
+                               .length = len * 8,
+                               .flags = 0};
+    esp_err_t err = spi_device_polling_transmit(device, &trans);
+    if (err != ESP_OK) {
+        LOG_ERROR(TAG, "Failed to do polling transmit");
+        return false;
+    }
+    return true;
 #elif BUILD_PICO
     LOG_ERROR(TAG, "NOT IMPLEMENTED");
     return false;
@@ -363,7 +475,7 @@ spi_dev_cfg_t spi_hal_create_config(int cs_pin, uint32_t clock_speed_hz,
     cfg.mode = mode;
 
 #if BUILD_ESP32
-    cfg.queue_size = 1;
+    cfg.queue_size = 7;
     cfg.command_bits = 0;
     cfg.address_bits = 8;
     cfg.dummy_bits = 0;
