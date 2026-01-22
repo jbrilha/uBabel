@@ -12,6 +12,11 @@
 #include <math.h>
 #include <stdint.h>
 
+// TODO these are from Arduino, move into HAL or something
+#define set_bit(value, bit) ((value) |= (1UL << (bit)))
+#define read_bit(value, bit) (((value) >> (bit)) & 0x01)
+
+// these are for the M5 Core Basic
 #define CS_PIN (5)
 #define RST_PIN (26)
 #define DIO0_PIN (36)
@@ -461,6 +466,31 @@ static void sx127x_set_tx(lora_radio_t *r, uint32_t timeout) {
     write_register(c, REG_OPMODE, (MODE_TX + 0x88)); // TX on LoRa mode
 }
 
+static void sx127x_set_rx(lora_radio_t *r, uint32_t timeout) {
+    sx127x_t *c = (sx127x_t *)r->chip;
+    // no TX timeout function for SX127X!! timeout is ignored
+
+    sx127x_clear_IRQ_status(r, IRQ_RADIO_ALL);
+
+    write_register(c, REG_OPMODE,
+                   (MODE_RXCONTINUOUS + 0x80)); // RX on LoRa mode
+}
+
+static int sx127x_read_IRQ_status(lora_radio_t *r) {
+    sx127x_t *c = (sx127x_t *)r->chip;
+    bool has_CRC;
+    uint8_t regdata = read_register(c, REG_IRQFLAGS);
+    has_CRC = read_register(c, REG_HOPCHANNEL) & 0x40;
+
+    if (read_bit(regdata, 6)) {
+        if (!has_CRC && c->use_CRC) {
+            set_bit(c->IRQ_MSB, 10);
+        }
+    }
+
+    return regdata + c->IRQ_MSB;
+}
+
 static int sx127x_transmit(lora_radio_t *r, const uint8_t *data, size_t len,
                            uint32_t timeout_ms) {
     sx127x_t *c = (sx127x_t *)r->chip;
@@ -478,9 +508,6 @@ static int sx127x_transmit(lora_radio_t *r, const uint8_t *data, size_t len,
     // and save in FIFO access ptr
     write_register(c, REG_FIFOADDRPTR, ptr);
 
-    uint8_t tx_buf[1 + len];
-    tx_buf[0] = WREG_FIFO;
-    memcpy(&tx_buf[1], data, len);
     if (!spi_hal_write_reg_buffer(c->spi_dev, WREG_FIFO, data, len)) {
         ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI");
         return 0;
@@ -510,6 +537,58 @@ static int sx127x_transmit(lora_radio_t *r, const uint8_t *data, size_t len,
     }
 
     return c->tx_packet_len;
+}
+
+static int sx127x_receive(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
+                          uint32_t timeout_ms) {
+    sx127x_t *c = (sx127x_t *)r->chip;
+
+    uint16_t index;
+    uint32_t start_ms;
+    uint8_t regdata;
+
+    sx127x_set_mode(r, MODE_STDBY_RC);
+
+    // retrieve the RXbase address pointer
+    regdata = read_register(c, REG_FIFORXBASEADDR);
+    // and save in FIFO access ptr
+    write_register(c, REG_FIFOADDRPTR, regdata);
+
+    sx127x_set_DIO_IRQ_params(r, IRQ_RADIO_ALL, (IRQ_RX_DONE), 0, 0);
+    sx127x_set_rx(r, 0);
+
+    if (timeout_ms == 0) {
+        while (!rx_done(c)) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    } else {
+        start_ms = hal_millis();
+        while (!rx_done(c) && ((hal_millis() - start_ms) < timeout_ms)) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+
+    sx127x_set_mode(r, MODE_STDBY_RC);
+    if (!rx_done(c)) {
+        c->IRQ_MSB = IRQ_RX_TIMEOUT;
+        return 0;
+    }
+
+    if (sx127x_read_IRQ_status(r) != (IRQ_RX_DONE + IRQ_HEADER_VALID)) {
+        return 0; // no RX done and header valid only, could be CRC error
+    }
+
+    uint8_t packet_len = read_register(c, REG_RXNBBYTES);
+    if (packet_len > max_len) {
+        packet_len = max_len; // truncate
+    }
+
+    if (!spi_hal_read_reg_buffer(c->spi_dev, REG_FIFO, rx_buf, packet_len)) {
+        ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI");
+        return 0;
+    }
+
+    return packet_len;
 }
 
 static bool sx127x_driver_init(lora_radio_t *r, const lora_config_t *config) {
@@ -555,7 +634,7 @@ lora_radio_t *lora_create_sx127x_radio(void) {
     radio->set_sync_word = sx127x_set_sync_word;
     radio->set_high_sensitivity = sx127x_set_high_sensitivity;
     radio->transmit = sx127x_transmit;
-    // radio->receive = sx127x_receive;
+    radio->receive = sx127x_receive;
 
     return radio;
 }

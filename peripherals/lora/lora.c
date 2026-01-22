@@ -3,6 +3,7 @@
 
 #include "event_dispatcher.h"
 #include "lora_events.h"
+#include <string.h>
 
 #define LORA_MAX_PKT_LENGTH 255
 #define LORA_HEADER_SIZE sizeof(lora_packet_t)
@@ -71,7 +72,7 @@ int lora_transmit_raw(lora_radio_t *r, const uint8_t *data, size_t data_len,
     return r->transmit(r, data, data_len, timeout_ms);
 }
 
-int lora_transmit(lora_radio_t *r, const lora_packet_t *packet,
+int lora_transmit_packet(lora_radio_t *r, const lora_packet_t *packet,
                   uint32_t timeout_ms) {
     if (!r || !r->transmit || !packet) {
         return 0;
@@ -109,28 +110,118 @@ int lora_transmit(lora_radio_t *r, const lora_packet_t *packet,
     return trans_len;
 }
 
+int lora_receive_raw(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
+                     uint32_t timeout_ms) {
+    if (!r || !r->receive || !rx_buf) {
+        return 0;
+    }
+
+    if (max_len > LORA_MAX_PKT_LENGTH) {
+        LOG_ERROR(TAG, "invalid packet size %d", max_len);
+        return 0;
+    }
+
+    return r->receive(r, rx_buf, max_len, timeout_ms);
+}
+
+int lora_receive_packet(lora_radio_t *r, lora_packet_t *packet, uint8_t max_len,
+                        uint32_t timeout_ms) {
+    if (!r || !r->receive || !packet) {
+        return 0;
+    }
+
+    if (max_len > LORA_MAX_PKT_LENGTH) {
+        LOG_ERROR(TAG, "invalid packet size %d", max_len);
+        return 0;
+    }
+
+    uint8_t buf[max_len];
+    int rx_len = r->receive(r, buf, max_len, 1000);
+    if (rx_len <= 0) {
+        ESP_LOGE(TAG, "Failed to receive packet, len: %d", rx_len);
+        return 0;
+    }
+
+    if (rx_len < sizeof(lora_packet_t)) {
+        ESP_LOGW(TAG, "Packet too small: %d bytes", rx_len);
+        return 0;
+    }
+
+    memcpy(packet, buf, rx_len);
+
+    if (rx_len < sizeof(lora_packet_t) + packet->payload_len) {
+        ESP_LOGW(TAG, "Truncated payload");
+    }
+
+    return rx_len;
+}
+
 static void lora_sender_task(void *pvParameters) {
     uint8_t i = 0;
     lora_radio_t *r = (lora_radio_t *)pvParameters;
-    if (r) {
-        uint8_t msg[] = "HELLO WORLD";
-        while (true && i++ < 255) {
-            lora_packet_t *pkt =
-                new_lora_packet(0xFF, 0xAB, i, 0x00, msg, sizeof(msg));
-            if (lora_transmit(r, pkt, 1000)) {
-                ESP_LOGI(TAG, "SENT");
-            } else {
-                ESP_LOGE(TAG, "FAILED TO SEND");
-            }
-
-            free(pkt);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
+    if (!r) {
+        vTaskDelete(NULL);
     }
+
+    uint8_t msg[] = "HELLO WORLD";
+    // lora_packet_t *sent_pkt = (lora_packet_t *)malloc(LORA_MAX_PKT_LENGTH);
+    uint8_t tx_len = 0;
+    while (true && i++ < 255) {
+        lora_packet_t *pkt =
+            new_lora_packet(0xFF, 0xAB, i, 0x00, msg, sizeof(msg));
+        if ((tx_len = lora_transmit_packet(r, pkt, 1000))) {
+            ESP_LOGW(TAG, "SENT");
+            ESP_LOGI(TAG, "Packet sent:");
+            ESP_LOGI(TAG, "  recipient_id: 0x%02X", pkt->recipient_id);
+            ESP_LOGI(TAG, "  sender_id   : 0x%02X", pkt->sender_id);
+            ESP_LOGI(TAG, "  message_id  : %u", pkt->message_id);
+            ESP_LOGI(TAG, "  flags       : 0x%02X", pkt->flags);
+            ESP_LOGI(TAG, "  payload_len : %u", pkt->payload_len);
+
+            ESP_LOGI(TAG, "  payload     :");
+            // ESP_LOG_BUFFER_HEXDUMP(TAG, pkt->payload,
+            //                        pkt->payload_len, ESP_LOG_INFO);
+
+            ESP_LOGI(TAG, "  payload str : %.*s", pkt->payload_len,
+                     pkt->payload);
+        } else {
+            ESP_LOGE(TAG, "FAILED TO SEND");
+        }
+
+        tx_len = 0;
+        free(pkt);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
     ESP_LOGI(TAG, "DONE");
 
     vTaskDelete(NULL);
 }
+/* static void lora_sender_task(void *pvParameters) {
+    uint8_t i = 0;
+    lora_radio_t *r = (lora_radio_t *)pvParameters;
+    if (!r) {
+        vTaskDelete(NULL);
+    }
+
+    uint8_t msg[] = "HELLO WORLD";
+    // lora_packet_t *sent_pkt = (lora_packet_t *)malloc(LORA_MAX_PKT_LENGTH);
+    uint8_t tx_len = 0;
+    while (true && i++ < 255) {
+        if ((tx_len = lora_transmit_raw(r, msg, sizeof(msg), 1000))) {
+            ESP_LOGW(TAG, "SENT %.*s", tx_len, msg);
+        } else {
+            ESP_LOGE(TAG, "FAILED TO SEND");
+        }
+
+        tx_len = 0;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    ESP_LOGI(TAG, "DONE");
+
+    vTaskDelete(NULL);
+} */
 
 bool lora_start_sender(lora_radio_t *r) {
     return xTaskCreate(lora_sender_task, "LORA_SEND_TASK", 4096, (void *)r, 2,
@@ -139,12 +230,58 @@ bool lora_start_sender(lora_radio_t *r) {
 
 static void lora_receiver_task(void *pvParameters) {
     lora_radio_t *r = (lora_radio_t *)pvParameters;
-    if (r) {
-        // TODO
+    if (!r) {
+        vTaskDelete(NULL);
+    }
+
+    uint8_t pkt_buf[LORA_MAX_PKT_LENGTH];
+    lora_packet_t *pkt = (lora_packet_t *)pkt_buf;
+
+    while (true) {
+        if (lora_receive_packet(r, pkt, LORA_MAX_PKT_LENGTH, 1000)) {
+            ESP_LOGI(TAG, "Packet received:");
+            ESP_LOGI(TAG, "  recipient_id: 0x%02X", pkt->recipient_id);
+            ESP_LOGI(TAG, "  sender_id   : 0x%02X", pkt->sender_id);
+            ESP_LOGI(TAG, "  message_id  : %u", pkt->message_id);
+            ESP_LOGI(TAG, "  flags       : 0x%02X", pkt->flags);
+            ESP_LOGI(TAG, "  payload_len : %u", pkt->payload_len);
+
+            ESP_LOGI(TAG, "  payload     :");
+            ESP_LOG_BUFFER_HEXDUMP(TAG, pkt->payload, pkt->payload_len,
+                                   ESP_LOG_INFO);
+
+            ESP_LOGI(TAG, "  payload str : %.*s", pkt->payload_len,
+                     pkt->payload);
+        } else {
+            ESP_LOGE(TAG, "No packet received");
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
     vTaskDelete(NULL);
 }
+
+/* static void lora_receiver_task(void *pvParameters) {
+    lora_radio_t *r = (lora_radio_t *)pvParameters;
+    if (!r) {
+        vTaskDelete(NULL);
+    }
+    uint8_t rx_buf[64];
+    int len = 0;
+    while (true) {
+        if ((len = lora_receive_raw(r, rx_buf, LORA_MAX_PKT_LENGTH, 1000))) {
+            ESP_LOGI(TAG, "RX %d bytes: %.*s", len, len, rx_buf);
+        } else {
+            ESP_LOGE(TAG, "No packet received");
+        }
+
+        len = 0;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    vTaskDelete(NULL);
+} */
 
 bool lora_start_receiver(lora_radio_t *r) {
     return xTaskCreate(lora_receiver_task, "LORA_REC_TASK", 4096, (void *)r, 2,

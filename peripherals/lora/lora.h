@@ -71,8 +71,10 @@ struct lora_radio {
 
     int (*transmit)(lora_radio_t *r, const uint8_t *data, size_t len,
                     uint32_t timeout_ms);
-    int (*receive)(lora_radio_t *r, lora_rx_info_t *rx_info,
+    int (*receive)(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
                    uint32_t timeout_ms);
+    int (*receive_info)(lora_radio_t *r, lora_rx_info_t *rx_info,
+                        uint32_t timeout_ms);
 };
 
 bool lora_init_w_config(lora_radio_t *r, const lora_config_t *config);
@@ -95,11 +97,17 @@ void lora_set_packet_params(lora_radio_t *r, uint16_t preamble_len,
 void lora_set_sync_word(lora_radio_t *r, uint16_t sync_word);
 void lora_set_high_sensitivity(lora_radio_t *r);
 
-int lora_transmit(lora_radio_t *r, const lora_packet_t *packet,
-                  uint32_t timeout_ms);
+int lora_transmit_packet(lora_radio_t *r, const lora_packet_t *packet,
+                         uint32_t timeout_ms);
 int lora_transmit_raw(lora_radio_t *r, const uint8_t *data, size_t data_len,
                       uint32_t timeout_ms);
-int lora_receive(lora_radio_t *r, lora_rx_info_t *rx_info, uint32_t timeout_ms);
+
+int lora_receive_raw(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
+                 uint32_t timeout_ms);
+int lora_receive_packet(lora_radio_t *r, lora_packet_t *packet, uint8_t max_len,
+                        uint32_t timeout_ms);
+int lora_receive_info(lora_radio_t *r, lora_rx_info_t *rx_info,
+                      uint32_t timeout_ms);
 
 int lora_sleep(lora_radio_t *r);
 int lora_wakeup(lora_radio_t *r);
