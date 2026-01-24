@@ -22,7 +22,7 @@
 #define DIO0_PIN (36)
 
 typedef struct {
-    int8_t cs_pin;
+    lora_radio_t *radio; // backpointer for consistency with sx126x
     int8_t rst_pin;
     int8_t dio0_pin;
     spi_dev_handle_t spi_dev;
@@ -32,14 +32,44 @@ typedef struct {
     bool use_CRC;
     uint16_t IRQ_MSB;
     uint8_t tx_packet_len; // last packet transmitted
+    uint8_t rx_packet_len; // last packet received
 } sx127x_t;
 
 static const char *TAG = "SX127x";
 
-static void sx127x_set_mode(lora_radio_t *r, uint8_t mode);
 static bool sx127x_check_device(sx127x_t *c);
-static void sx127x_apply_config(sx127x_t *c);
 static void sx127x_reset_device(sx127x_t *c);
+static void sx127x_set_mode(lora_radio_t *r, uint8_t mode);
+static void sx127x_set_packet_type(lora_radio_t *r, uint8_t packet_type);
+static void sx127x_set_frequency(lora_radio_t *r, uint64_t freq,
+                                 int32_t offset);
+static void sx127x_calibrate_image(lora_radio_t *r, uint32_t freq);
+static void sx127x_set_tx_params(lora_radio_t *r, int8_t tx_power,
+                                 uint8_t ramp_time);
+static void sx127x_set_modulation_params(lora_radio_t *r,
+                                         uint8_t spreading_factor,
+                                         uint8_t bandwidth, uint8_t code_rate,
+                                         uint8_t optimization);
+static void sx127x_set_buf_base_addr(lora_radio_t *r, uint8_t tx_base_addr,
+                                     uint8_t rx_base_addr);
+static void sx127x_set_packet_params(lora_radio_t *r, uint16_t preamble_len,
+                                     uint8_t fixed_or_variable_len,
+                                     uint8_t packet_len, uint8_t CRC_mode,
+                                     uint8_t IQ_mode);
+static void sx127x_set_sync_word(lora_radio_t *r, uint16_t sync_word);
+static void sx127x_set_high_sensitivity(lora_radio_t *r);
+static void sx127x_set_DIO_IRQ_params(lora_radio_t *r, uint16_t irq_mask,
+                                      uint16_t dio0_mask, uint16_t dio1_mask,
+                                      uint16_t dio2_mask);
+static void sx127x_clear_IRQ_status(lora_radio_t *r, uint16_t irq_mask);
+static void sx127x_set_tx(lora_radio_t *r, uint32_t timeout);
+static void sx127x_set_rx(lora_radio_t *r, uint32_t timeout);
+static int sx127x_read_IRQ_status(lora_radio_t *r);
+static int sx127x_transmit(lora_radio_t *r, uint8_t *data, size_t len,
+                           uint32_t timeout_ms);
+static int sx127x_receive(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
+                          uint32_t timeout_ms);
+static bool sx127x_driver_init(lora_radio_t *r, const lora_config_t *config);
 
 // utils at the bottom
 static uint32_t get_actual_bandwidth(uint8_t bw_reg_value);
@@ -70,20 +100,23 @@ static uint8_t read_register(sx127x_t *c, uint8_t address) {
 static bool rx_done(sx127x_t *c) { return gpio_get_level(c->dio0_pin); }
 static bool tx_done(sx127x_t *c) { return gpio_get_level(c->dio0_pin); }
 
-static sx127x_t *sx127x_chip_init_on_pins(int8_t cs_pin, int8_t rst_pin,
-                                          int8_t dio0_pin) {
+static sx127x_t *sx127x_chip_init_on_pins(lora_radio_t *r, int8_t cs_pin,
+                                          int8_t rst_pin, int8_t dio0_pin) {
     sx127x_t *c = malloc(sizeof(sx127x_t));
     if (!c) {
         return NULL;
     }
 
-    c->cs_pin = cs_pin;
+    r->chip = c;
+    c->radio = r;
+
     c->rst_pin = rst_pin;
     c->dio0_pin = dio0_pin;
 
     spi_dev_cfg_t cfg = spi_hal_create_config(cs_pin, 8E6, 0);
     c->spi_dev = spi_hal_add_device(&cfg);
     if (!c->spi_dev) {
+        r->chip = NULL;
         free(c);
         return NULL;
     }
@@ -100,6 +133,7 @@ static sx127x_t *sx127x_chip_init_on_pins(int8_t cs_pin, int8_t rst_pin,
     if (!sx127x_check_device(c)) {
         LOG_ERROR(TAG, "failed to initialize lora chip");
         spi_hal_remove_device(c->spi_dev);
+        r->chip = NULL;
         free(c);
         return NULL;
     }
@@ -107,16 +141,14 @@ static sx127x_t *sx127x_chip_init_on_pins(int8_t cs_pin, int8_t rst_pin,
     return c;
 }
 
-static sx127x_t *sx127x_chip_init() {
-    return sx127x_chip_init_on_pins(CS_PIN, RST_PIN, DIO0_PIN);
+static sx127x_t *sx127x_chip_init(lora_radio_t *r) {
+    return sx127x_chip_init_on_pins(r, CS_PIN, RST_PIN, DIO0_PIN);
 }
 
 static void sx127x_set_mode(lora_radio_t *r, uint8_t mode) {
     sx127x_t *c = (sx127x_t *)r->chip;
     write_register(c, REG_OPMODE, mode + c->packet_type);
 }
-
-static void sx127x_apply_config(sx127x_t *c) {}
 
 static bool sx127x_check_device(sx127x_t *c) {
 
@@ -491,7 +523,7 @@ static int sx127x_read_IRQ_status(lora_radio_t *r) {
     return regdata + c->IRQ_MSB;
 }
 
-static int sx127x_transmit(lora_radio_t *r, const uint8_t *data, size_t len,
+static int sx127x_transmit(lora_radio_t *r, uint8_t *data, size_t len,
                            uint32_t timeout_ms) {
     sx127x_t *c = (sx127x_t *)r->chip;
 
@@ -539,20 +571,19 @@ static int sx127x_transmit(lora_radio_t *r, const uint8_t *data, size_t len,
     return c->tx_packet_len;
 }
 
-static int sx127x_receive(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
+static int sx127x_receive(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
                           uint32_t timeout_ms) {
     sx127x_t *c = (sx127x_t *)r->chip;
 
-    uint16_t index;
     uint32_t start_ms;
-    uint8_t regdata;
+    uint8_t reg_data;
 
     sx127x_set_mode(r, MODE_STDBY_RC);
 
     // retrieve the RXbase address pointer
-    regdata = read_register(c, REG_FIFORXBASEADDR);
+    reg_data = read_register(c, REG_FIFORXBASEADDR);
     // and save in FIFO access ptr
-    write_register(c, REG_FIFOADDRPTR, regdata);
+    write_register(c, REG_FIFOADDRPTR, reg_data);
 
     sx127x_set_DIO_IRQ_params(r, IRQ_RADIO_ALL, (IRQ_RX_DONE), 0, 0);
     sx127x_set_rx(r, 0);
@@ -578,17 +609,18 @@ static int sx127x_receive(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
         return 0; // no RX done and header valid only, could be CRC error
     }
 
-    uint8_t packet_len = read_register(c, REG_RXNBBYTES);
-    if (packet_len > max_len) {
-        packet_len = max_len; // truncate
+    c->rx_packet_len = read_register(c, REG_RXNBBYTES);
+    if (c->rx_packet_len > max_len) {
+        c->rx_packet_len = max_len;
     }
 
-    if (!spi_hal_read_reg_buffer(c->spi_dev, REG_FIFO, rx_buf, packet_len)) {
+    if (!spi_hal_read_reg_buffer(c->spi_dev, REG_FIFO, rx_buf,
+                                 c->rx_packet_len)) {
         ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI");
         return 0;
     }
 
-    return packet_len;
+    return c->rx_packet_len;
 }
 
 static bool sx127x_driver_init(lora_radio_t *r, const lora_config_t *config) {
@@ -615,24 +647,35 @@ lora_radio_t *lora_create_sx127x_radio(void) {
     if (!radio)
         return NULL;
 
-    sx127x_t *c = sx127x_chip_init();
+    sx127x_t *c = sx127x_chip_init(radio);
     if (!c) {
         free(radio);
         return NULL;
     }
 
     radio->name = TAG;
-    radio->chip = c;
+    // radio->chip = c; // done internally in chip init
     radio->init = sx127x_driver_init;
-    radio->set_mode = sx127x_set_mode;
-    radio->set_frequency = sx127x_set_frequency;
     radio->calibrate_image = sx127x_calibrate_image;
+    radio->clear_IRQ_status = sx127x_clear_IRQ_status;
+    radio->read_IRQ_status = sx127x_read_IRQ_status;
+    // TODO might need to restructure these to not be called in the chip init
+    // radio->check_device = sx127x_check_device;
+    // radio->reset_device = sx127x_reset_device;
+
+    radio->set_mode = sx127x_set_mode;
+    radio->set_packet_type = sx127x_set_packet_type;
+    radio->set_frequency = sx127x_set_frequency;
     radio->set_tx_params = sx127x_set_tx_params;
     radio->set_modulation_params = sx127x_set_modulation_params;
     radio->set_buf_base_addr = sx127x_set_buf_base_addr;
     radio->set_packet_params = sx127x_set_packet_params;
     radio->set_sync_word = sx127x_set_sync_word;
     radio->set_high_sensitivity = sx127x_set_high_sensitivity;
+    radio->set_DIO_IRQ_params = sx127x_set_DIO_IRQ_params;
+    radio->set_tx = sx127x_set_tx;
+    radio->set_rx = sx127x_set_rx;
+
     radio->transmit = sx127x_transmit;
     radio->receive = sx127x_receive;
 
