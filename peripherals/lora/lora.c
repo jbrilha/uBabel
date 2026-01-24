@@ -58,7 +58,7 @@ bool lora_init(lora_radio_t *r) {
     return r->init(r, &config);
 }
 
-int lora_transmit_raw(lora_radio_t *r, const uint8_t *data, size_t data_len,
+int lora_transmit_raw(lora_radio_t *r, uint8_t *data, size_t data_len,
                       uint32_t timeout_ms) {
     if (!r || !r->transmit || !data) {
         return 0;
@@ -73,7 +73,7 @@ int lora_transmit_raw(lora_radio_t *r, const uint8_t *data, size_t data_len,
 }
 
 int lora_transmit_packet(lora_radio_t *r, const lora_packet_t *packet,
-                  uint32_t timeout_ms) {
+                         uint32_t timeout_ms) {
     if (!r || !r->transmit || !packet) {
         return 0;
     }
@@ -87,10 +87,10 @@ int lora_transmit_packet(lora_radio_t *r, const lora_packet_t *packet,
         return 0;
     }
 
-    uint8_t trans_len =
-        r->transmit(r, (const uint8_t *)packet, (uint8_t)total_len, timeout_ms);
+    uint8_t tx_len =
+        r->transmit(r, (uint8_t *)packet, (uint8_t)total_len, timeout_ms);
 
-    if (trans_len > 0) {
+    if (tx_len > 0) {
         lora_packet_t *pkt_copy = malloc(total_len);
         if (pkt_copy) {
             memcpy(pkt_copy, packet, total_len);
@@ -107,10 +107,10 @@ int lora_transmit_packet(lora_radio_t *r, const lora_packet_t *packet,
         }
     }
 
-    return trans_len;
+    return tx_len;
 }
 
-int lora_receive_raw(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
+int lora_receive_raw(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
                      uint32_t timeout_ms) {
     if (!r || !r->receive || !rx_buf) {
         return 0;
@@ -124,7 +124,7 @@ int lora_receive_raw(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
     return r->receive(r, rx_buf, max_len, timeout_ms);
 }
 
-int lora_receive_packet(lora_radio_t *r, lora_packet_t *packet, uint8_t max_len,
+int lora_receive_packet(lora_radio_t *r, lora_packet_t *packet, size_t max_len,
                         uint32_t timeout_ms) {
     if (!r || !r->receive || !packet) {
         return 0;
@@ -166,7 +166,7 @@ static void lora_sender_task(void *pvParameters) {
     uint8_t msg[] = "HELLO WORLD";
     // lora_packet_t *sent_pkt = (lora_packet_t *)malloc(LORA_MAX_PKT_LENGTH);
     uint8_t tx_len = 0;
-    while (true && i++ < 255) {
+    while (i++ < 255) {
         lora_packet_t *pkt =
             new_lora_packet(0xFF, 0xAB, i, 0x00, msg, sizeof(msg));
         if ((tx_len = lora_transmit_packet(r, pkt, 1000))) {
@@ -193,6 +193,7 @@ static void lora_sender_task(void *pvParameters) {
 
     vTaskDelete(NULL);
 }
+
 /* static void lora_sender_task(void *pvParameters) {
     uint8_t i = 0;
     lora_radio_t *r = (lora_radio_t *)pvParameters;
@@ -200,8 +201,7 @@ static void lora_sender_task(void *pvParameters) {
         vTaskDelete(NULL);
     }
 
-    uint8_t msg[] = "HELLO WORLD";
-    // lora_packet_t *sent_pkt = (lora_packet_t *)malloc(LORA_MAX_PKT_LENGTH);
+    uint8_t msg[] = "Hello World 1234567890*";
     uint8_t tx_len = 0;
     while (true && i++ < 255) {
         if ((tx_len = lora_transmit_raw(r, msg, sizeof(msg), 1000))) {

@@ -12,6 +12,8 @@ typedef struct {
     uint32_t offset;
     uint8_t spreading_factor;
     uint8_t bandwidth;
+    uint8_t code_rate;
+    uint8_t optimization;
     int8_t tx_power;
     uint8_t ramp_time;
 } lora_config_t;
@@ -48,12 +50,14 @@ struct lora_radio {
     void *chip;
 
     bool (*init)(lora_radio_t *r, const lora_config_t *config);
-    void (*deinit)(lora_radio_t *r);
+    void (*deinit)(lora_radio_t *r); // TODO
+
+    void (*calibrate_image)(lora_radio_t *r, uint32_t freq);
+    void (*clear_IRQ_status)(lora_radio_t *r, uint16_t irq_mask);
 
     void (*set_mode)(lora_radio_t *r, uint8_t mode);
     void (*set_packet_type)(lora_radio_t *r, uint8_t packet_type);
     void (*set_frequency)(lora_radio_t *r, uint64_t freq, int32_t offset);
-    void (*calibrate_image)(lora_radio_t *r, uint32_t freq);
     void (*set_tx_params)(lora_radio_t *r, int8_t power, uint8_t ramp_time);
     void (*set_modulation_params)(lora_radio_t *r, uint8_t spreading_factor,
                                   uint8_t bandwidth, uint8_t code_rate,
@@ -65,16 +69,20 @@ struct lora_radio {
                               uint8_t CRC_mode, uint8_t IQ_mode);
     void (*set_sync_word)(lora_radio_t *r, uint16_t sync_word);
     void (*set_high_sensitivity)(lora_radio_t *r);
+    void (*set_DIO_IRQ_params)(lora_radio_t *r, uint16_t irq_mask,
+                               uint16_t dio0_mask, uint16_t dio1_mask,
+                               uint16_t dio2_mask);
+    int (*read_IRQ_status)(lora_radio_t *r);
+    void (*set_tx)(lora_radio_t *r, uint32_t timeout);
+    void (*set_rx)(lora_radio_t *r, uint32_t timeout);
 
-    int (*sleep)(lora_radio_t *r);
-    int (*wakeup)(lora_radio_t *r);
+    int (*sleep)(lora_radio_t *r);  // TODO
+    int (*wakeup)(lora_radio_t *r); // TODO
 
-    int (*transmit)(lora_radio_t *r, const uint8_t *data, size_t len,
+    int (*transmit)(lora_radio_t *r, uint8_t *data, size_t len,
                     uint32_t timeout_ms);
-    int (*receive)(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
+    int (*receive)(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
                    uint32_t timeout_ms);
-    int (*receive_info)(lora_radio_t *r, lora_rx_info_t *rx_info,
-                        uint32_t timeout_ms);
 };
 
 bool lora_init_w_config(lora_radio_t *r, const lora_config_t *config);
@@ -99,12 +107,12 @@ void lora_set_high_sensitivity(lora_radio_t *r);
 
 int lora_transmit_packet(lora_radio_t *r, const lora_packet_t *packet,
                          uint32_t timeout_ms);
-int lora_transmit_raw(lora_radio_t *r, const uint8_t *data, size_t data_len,
+int lora_transmit_raw(lora_radio_t *r, uint8_t *data, size_t data_len,
                       uint32_t timeout_ms);
 
-int lora_receive_raw(lora_radio_t *r, uint8_t *rx_buf, uint8_t max_len,
-                 uint32_t timeout_ms);
-int lora_receive_packet(lora_radio_t *r, lora_packet_t *packet, uint8_t max_len,
+int lora_receive_raw(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
+                     uint32_t timeout_ms);
+int lora_receive_packet(lora_radio_t *r, lora_packet_t *packet, size_t max_len,
                         uint32_t timeout_ms);
 int lora_receive_info(lora_radio_t *r, lora_rx_info_t *rx_info,
                       uint32_t timeout_ms);
