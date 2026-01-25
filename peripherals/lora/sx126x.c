@@ -211,7 +211,7 @@ static sx126x_t *sx126x_chip_init_on_pins(lora_radio_t *r, int8_t cs_pin,
     c->rxen_pin = rxen_pin;
     c->txen_pin = txen_pin;
 
-    spi_dev_cfg_t cfg = spi_hal_create_config(cs_pin, 1E6, 0);
+    spi_dev_cfg_t cfg = spi_hal_create_config(cs_pin, 8E6, 0);
     cfg.command_bits = 8;
     cfg.address_bits = 0;
     c->spi_dev = spi_hal_add_device(&cfg);

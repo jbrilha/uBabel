@@ -1,6 +1,6 @@
 #include "lvgl_lora_sender_widget.h"
-#include "freertos/FreeRTOS.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 
 #include "lora.h"
 #include <stdio.h>
@@ -147,24 +147,24 @@ void lora_sndr_widget_set_recipient_txt(const char *recipient) {
 }
 
 void lora_sndr_widget_send_transmission(event_t *e) {
-    lora_info_t info = *(lora_info_t *)e->payload;
+    lora_packet_t *packet = (lora_packet_t *)e->payload;
 
     char sender_str[8];
-    snprintf(sender_str, sizeof(sender_str), "0x%02X", info.pkt->sender_id);
+    snprintf(sender_str, sizeof(sender_str), "0x%02X", packet->sender_id);
     lora_sndr_widget_set_sender_txt(sender_str);
 
     char recipient_str[8];
     snprintf(recipient_str, sizeof(recipient_str), "0x%02X",
-             info.pkt->recipient_id);
+             packet->recipient_id);
     lora_sndr_widget_set_recipient_txt(recipient_str);
 
     char msg_id_str[8];
-    snprintf(msg_id_str, sizeof(msg_id_str), "%d", info.pkt->message_id);
+    snprintf(msg_id_str, sizeof(msg_id_str), "%d", packet->message_id);
     lora_sndr_widget_set_message_id_txt(msg_id_str);
 
-    char payload_str[info.pkt->payload_len + 1];
-    memcpy(payload_str, info.pkt->payload, info.pkt->payload_len);
-    payload_str[info.pkt->payload_len] = '\0';
+    char payload_str[packet->payload_len + 1];
+    memcpy(payload_str, packet->payload, packet->payload_len);
+    payload_str[packet->payload_len] = '\0';
     lora_sndr_widget_set_message_txt(payload_str);
 }
 
@@ -174,7 +174,8 @@ void lora_sndr_widget_init(lv_display_t *disp, SemaphoreHandle_t lock) {
     lora_sndr_widget_init_on_container(scr, lock);
 }
 
-void lora_sndr_widget_init_on_container(lv_obj_t *container, SemaphoreHandle_t lock) {
+void lora_sndr_widget_init_on_container(lv_obj_t *container,
+                                        SemaphoreHandle_t lock) {
     lvgl_lock = lock;
 
     if (lvgl_lock) {

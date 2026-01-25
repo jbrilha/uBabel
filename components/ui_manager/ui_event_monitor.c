@@ -113,6 +113,11 @@ void ui_event_monitor_init(void) {
 #endif
 
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              UI_EVENT_SND_LORA);
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
+                              UI_EVENT_REC_LORA);
+
+    event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_SUBTYPE_NETWORK_UP);
     event_dispatcher_register(ui_event_queue, EVENT_TYPE_NOTIFICATION,
                               EVENT_SUBTYPE_NETWORK_DOWN);
