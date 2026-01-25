@@ -122,7 +122,7 @@ int lora_wakeup(lora_radio_t *r);
 
 lora_packet_t *new_lora_packet(uint8_t recipient, uint8_t sender,
                                uint16_t msg_id, uint8_t flags,
-                               const uint8_t *payload, uint8_t payload_len);
+                               const uint8_t *payload, size_t payload_len);
 
 bool lora_start_sender(lora_radio_t *r);
 bool lora_start_receiver(lora_radio_t *r);

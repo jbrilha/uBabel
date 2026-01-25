@@ -15,7 +15,7 @@ static const char *TAG = "LoRa Driver";
 
 lora_packet_t *new_lora_packet(uint8_t recipient, uint8_t sender,
                                uint16_t msg_id, uint8_t flags,
-                               const uint8_t *payload, uint8_t payload_len) {
+                               const uint8_t *payload, size_t payload_len) {
     if (payload_len > LORA_MAX_PAYLOAD_SIZE) {
         LOG_ERROR(TAG, "payload exceeds max size: %d out of %d bytes",
                   payload_len, LORA_MAX_PAYLOAD_SIZE);
@@ -87,25 +87,7 @@ int lora_transmit_packet(lora_radio_t *r, const lora_packet_t *packet,
         return 0;
     }
 
-    uint8_t tx_len =
-        r->transmit(r, (uint8_t *)packet, (uint8_t)total_len, timeout_ms);
-
-    if (tx_len > 0) {
-        lora_packet_t *pkt_copy = malloc(total_len);
-        if (pkt_copy) {
-            memcpy(pkt_copy, packet, total_len);
-
-            event_t *event =
-                create_event(EVENT_TYPE_NOTIFICATION, UI_EVENT_SND_LORA,
-                             pkt_copy, total_len);
-
-            if (event) {
-                event_dispatcher_post(event);
-            } else {
-                free(pkt_copy);
-            }
-        }
-    }
+    uint8_t tx_len = r->transmit(r, (uint8_t *)packet, total_len, timeout_ms);
 
     return tx_len;
 }
@@ -163,29 +145,39 @@ static void lora_sender_task(void *pvParameters) {
         vTaskDelete(NULL);
     }
 
-    uint8_t msg[] = "HELLO WORLD";
-    // lora_packet_t *sent_pkt = (lora_packet_t *)malloc(LORA_MAX_PKT_LENGTH);
+    char msg[32];
     uint8_t tx_len = 0;
     while (i++ < 255) {
+        snprintf(msg, sizeof(msg), "HELLO WORLD %d", i);
         lora_packet_t *pkt =
-            new_lora_packet(0xFF, 0xAB, i, 0x00, msg, sizeof(msg));
+            new_lora_packet(0xFF, 0xAB, i, 0x00, (const uint8_t *)msg, sizeof(msg));
         if ((tx_len = lora_transmit_packet(r, pkt, 1000))) {
-            LOG_WARN(TAG, "SENT");
-            LOG_INFO(TAG, "Packet sent:");
-            LOG_INFO(TAG, "  recipient_id: 0x%02X", pkt->recipient_id);
-            LOG_INFO(TAG, "  sender_id   : 0x%02X", pkt->sender_id);
-            LOG_INFO(TAG, "  message_id  : %u", pkt->message_id);
-            LOG_INFO(TAG, "  flags       : 0x%02X", pkt->flags);
-            LOG_INFO(TAG, "  payload_len : %u", pkt->payload_len);
+            // LOG_WARN(TAG, "SENT");
+            // LOG_INFO(TAG, "Packet sent:");
+            // LOG_INFO(TAG, "  recipient_id: 0x%02X", pkt->recipient_id);
+            // LOG_INFO(TAG, "  sender_id   : 0x%02X", pkt->sender_id);
+            // LOG_INFO(TAG, "  message_id  : %u", pkt->message_id);
+            // LOG_INFO(TAG, "  flags       : 0x%02X", pkt->flags);
+            // LOG_INFO(TAG, "  payload_len : %u", pkt->payload_len);
+            // LOG_INFO(TAG, "  payload str : %.*s", pkt->payload_len,
+            //          pkt->payload);
 
-            LOG_INFO(TAG, "  payload str : %.*s", pkt->payload_len,
-                     pkt->payload);
+            event_t *event = create_event(EVENT_TYPE_NOTIFICATION,
+                                          UI_EVENT_SND_LORA, pkt, tx_len);
+
+            if (event) {
+                event_dispatcher_post(event);
+            } else {
+                free(pkt);
+            }
         } else {
+            if (pkt) {
+                free(pkt);
+            }
             LOG_ERROR(TAG, "FAILED TO SEND");
         }
 
         tx_len = 0;
-        free(pkt);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
