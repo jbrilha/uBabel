@@ -1,7 +1,7 @@
 add_library(spi_hal INTERFACE)
 
 set(SPI_HAL_SOURCES
-  ${CMAKE_CURRENT_LIST_DIR}/spi_hal.c
+  ${CMAKE_CURRENT_LIST_DIR}/spi_hal_pico.c
   )
 
 target_sources(spi_hal INTERFACE

@@ -49,39 +49,20 @@ spi_dev_handle_t spi_hal_add_device_to_bus(spi_bus_t spi_host,
 spi_dev_handle_t spi_hal_add_device(spi_dev_cfg_t *dev_cfg);
 void spi_hal_remove_device(spi_dev_handle_t spi_device);
 
-bool spi_hal_receive_w_dummy(spi_dev_handle_t device, uint8_t *data, size_t len,
-                             uint8_t dummy_byte);
-bool spi_hal_receive(spi_dev_handle_t device, uint8_t *data, size_t len);
-
-bool spi_hal_write_reg_buffer(spi_dev_handle_t device, uint8_t address,
-                              const uint8_t *data, size_t len);
-bool spi_hal_read_reg_buffer(spi_dev_handle_t device, uint8_t address,
-                             uint8_t *data, size_t len);
-bool spi_hal_transmit(spi_dev_handle_t device, uint8_t *data, size_t len);
-
-bool spi_hal_read_register(spi_dev_handle_t device, uint8_t addr, uint8_t *data,
-                           size_t len);
+bool spi_hal_read_register_addr(spi_dev_handle_t device, uint8_t addr,
+                                uint8_t *data, size_t len);
 bool spi_hal_read_register_cmd(spi_dev_handle_t device, uint8_t cmd,
                                uint8_t *rx_data, uint8_t *tx_data, size_t len);
-bool spi_hal_read_register_cmd_addr(spi_dev_handle_t device, uint8_t cmd,
-                                    uint16_t addr, uint8_t *rx_data,
-                                    uint8_t *tx_data, size_t len);
 
-bool spi_hal_write_register(spi_dev_handle_t device, uint8_t addr,
-                            uint8_t *data, size_t len);
+bool spi_hal_write_register_addr(spi_dev_handle_t device, uint8_t addr,
+                                 const uint8_t *data, size_t len);
 bool spi_hal_write_register_cmd(spi_dev_handle_t device, uint8_t cmd,
-                                uint8_t *data, size_t len);
-bool spi_hal_write_register_cmd_addr(spi_dev_handle_t device, uint8_t cmd,
-                                     uint16_t addr, uint8_t *data, size_t len);
+                                const uint8_t *data, size_t len);
 
 uint8_t spi_hal_transfer(spi_dev_handle_t device, uint8_t tx_byte);
 
 spi_dev_cfg_t spi_hal_create_config(int cs_pin, uint32_t clock_speed_hz,
                                     uint8_t mode);
-
-bool spi_hal_write_then_read(spi_dev_handle_t device, uint8_t *tx_data,
-                             size_t tx_len, uint8_t *rx_data, size_t rx_len,
-                             uint8_t dummy_byte);
 
 bool is_spi_initialized();
 
