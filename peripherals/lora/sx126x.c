@@ -96,7 +96,7 @@ static void sx126x_set_high_sensitivity(lora_radio_t *r);
 static void sx126x_clear_IRQ_status(lora_radio_t *r, uint16_t irq_mask);
 static void sx126x_set_tx(lora_radio_t *r, uint32_t timeout);
 static void sx126x_set_rx(lora_radio_t *r, uint32_t timeout);
-static int sx126x_read_IRQ_status(lora_radio_t *r);
+static uint16_t sx126x_read_IRQ_status(lora_radio_t *r);
 static int sx126x_transmit(lora_radio_t *r, uint8_t *data, size_t len,
                            uint32_t timeout_ms);
 static int sx126x_receive(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
@@ -180,8 +180,31 @@ static uint8_t read_register(sx126x_t *r, uint16_t address) {
     return data;
 }
 
-static bool rx_done(sx126x_t *c) { return gpio_get_level(c->dio1_pin); }
-static bool tx_done(sx126x_t *c) { return gpio_get_level(c->dio1_pin); }
+static bool read_buffer(sx126x_t *c, uint8_t offset, uint8_t *data,
+                        uint8_t len) {
+    uint8_t tx_buf[2 + len];
+    tx_buf[0] = offset;
+    tx_buf[1] = 0xFF; // NOP after offset
+    memcpy(&tx_buf[2], data, len);
+
+    return spi_hal_read_register_cmd(c->spi_dev, RADIO_READ_BUFFER, data,
+                                     tx_buf, 2 + len);
+}
+
+static bool write_buffer(sx126x_t *c, uint8_t offset, const uint8_t *data,
+                         uint8_t len) {
+    uint8_t tx_buf[1 + len];
+    tx_buf[0] = offset;
+    memcpy(&tx_buf[1], data, len);
+
+    return spi_hal_write_register_cmd(c->spi_dev, RADIO_WRITE_BUFFER, tx_buf,
+                                      1 + len);
+}
+
+#define INLINE __attribute__((always_inline)) inline
+
+INLINE static bool rx_done(sx126x_t *c) { return gpio_get_level(c->dio1_pin); }
+INLINE static bool tx_done(sx126x_t *c) { return gpio_get_level(c->dio1_pin); }
 
 static void tx_enable(sx126x_t *c) {
     gpio_set_pin_level(c->rxen_pin, false);
@@ -528,7 +551,7 @@ static void sx126x_set_rx(lora_radio_t *r, uint32_t timeout) {
     write_command(c, RADIO_SET_RX, buf, 3);
 }
 
-static int sx126x_read_IRQ_status(lora_radio_t *r) {
+static uint16_t sx126x_read_IRQ_status(lora_radio_t *r) {
     sx126x_t *c = (sx126x_t *)r->chip;
 
     uint16_t temp;
@@ -614,33 +637,45 @@ static bool sx126x_driver_init(lora_radio_t *r, const lora_config_t *config) {
 
 static int sx126x_receive(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
                           uint32_t timeout_ms) {
-    // sx126x_t *c = (sx126x_t *)r->chip;
+    sx126x_t *c = (sx126x_t *)r->chip;
 
-    return 0;
-}
+    sx126x_set_DIO_IRQ_params(r, IRQ_RADIO_ALL,
+                              (IRQ_RX_DONE + IRQ_RX_TX_TIMEOUT), 0, 0);
+    sx126x_set_rx(r, timeout_ms);
 
-/* static bool write_buffer(sx126x_t *c, uint8_t offset, const uint8_t *data,
-                         uint8_t len) {
-    sx126x_check_busy(c->radio);
+    while (!rx_done(c)) {
+        vTaskDelay(1);
+    }
 
-    // [OFFSET][DATA...]
-    uint8_t tx_buf[1 + len];
-    tx_buf[0] = offset;
-    memcpy(&tx_buf[1], data, len);
+    sx126x_set_mode(r, MODE_STDBY_RC);
 
-    return spi_hal_write_register_cmd(c->spi_dev, RADIO_WRITE_BUFFER, tx_buf,
-                                      1 + len);
-} */
-static bool write_buffer(sx126x_t *c, uint8_t offset, const uint8_t *data,
-                         uint8_t len) {
-    sx126x_check_busy(c->radio);
+    uint16_t reg_data;
+    uint8_t buf[2];
 
-    uint8_t tx_buf[1 + len];
-    tx_buf[0] = offset;
-    memcpy(&tx_buf[1], data, len);
+    reg_data = sx126x_read_IRQ_status(r);
 
-    return spi_hal_write_register_cmd(c->spi_dev, RADIO_WRITE_BUFFER, tx_buf,
-                                      1 + len);
+    if ((reg_data & IRQ_HEADER_ERROR) | (reg_data & IRQ_CRC_ERROR) |
+        (reg_data & IRQ_RX_TX_TIMEOUT)) {
+        return 0; // packet errored somewhere so return 0
+    }
+
+    read_command(c, RADIO_GET_RXBUFFERSTATUS, buf, 2);
+    c->rx_packet_len = buf[0];
+    if (c->rx_packet_len > max_len) {
+        c->rx_packet_len = max_len; // truncate
+    }
+
+    uint8_t rx_start;
+
+    rx_start = buf[1];
+
+    sx126x_check_busy(r);
+
+    if (!read_buffer(c, rx_start, rx_buf, c->rx_packet_len)) {
+        return 0;
+    }
+
+    return c->rx_packet_len;
 }
 
 static int sx126x_transmit(lora_radio_t *r, uint8_t *data, size_t len,
@@ -654,12 +689,20 @@ static int sx126x_transmit(lora_radio_t *r, uint8_t *data, size_t len,
     sx126x_set_mode(r, MODE_STDBY_RC);
     sx126x_set_buf_base_addr(r, 0, 0);
 
+#ifdef USE_SPI_TRANSACTION // to use SPI_TRANSACTION enable define at beginning
+                           // of CPP file
+    SPI.beginTransaction(SPISettings(LTspeedMaximum, LTdataOrder, LTdataMode));
+#endif
     sx126x_check_busy(r);
 
     if (!write_buffer(c, 0, data, len)) {
         LOG_ERROR(TAG, "FAILED TO WRITE BUFFER");
         return 0;
     }
+
+#ifdef USE_SPI_TRANSACTION
+    SPI.endTransaction();
+#endif
 
     c->tx_packet_len = len;
     write_register(c, REG_LR_PAYLOADLENGTH, c->tx_packet_len);
@@ -696,7 +739,6 @@ lora_radio_t *lora_create_sx126x_radio(void) {
     radio->init = sx126x_driver_init;
     radio->calibrate_image = sx126x_calibrate_image;
     radio->clear_IRQ_status = sx126x_clear_IRQ_status;
-    radio->read_IRQ_status = sx126x_read_IRQ_status;
     // TODO might need to restructure these to not be called in the chip init
     // radio->check_device = sx126x_check_device;
     // radio->reset_device = sx126x_reset_device;
