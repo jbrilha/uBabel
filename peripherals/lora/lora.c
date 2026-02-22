@@ -236,11 +236,25 @@ static void lora_receiver_task(void *pvParameters) {
             LOG_INFO(TAG, "  payload str : %.*s", pkt->payload_len,
                      pkt->payload);
 
-            event_t *event = create_event(EVENT_TYPE_NOTIFICATION,
-                                          UI_EVENT_REC_LORA, pkt, rx_len);
+            size_t info_size = sizeof(lora_info_t) + rx_len;
+            lora_info_t *info = malloc(info_size);
+            if (info) {
+                info->rssi = 0;
+                info->snr = 0;
+                info->crc_err = false;
+                info->freq_err = 0;
+                info->pkt_size = rx_len;
+                info->pkt = (lora_packet_t *)(info + 1);
+                memcpy(info->pkt, pkt, rx_len);
 
-            if (event) {
-                event_dispatcher_post(event);
+                event_t *event =
+                    create_event(EVENT_TYPE_NOTIFICATION, UI_EVENT_REC_LORA,
+                                 info, info_size);
+                if (event) {
+                    event_dispatcher_post(event);
+                } else {
+                    free(info);
+                }
             }
         } else {
             LOG_ERROR(TAG, "No packet received");

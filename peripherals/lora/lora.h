@@ -36,13 +36,6 @@ typedef struct {
     uint8_t pkt_size;
 } lora_info_t;
 
-typedef struct {
-    uint8_t *data;
-    size_t length;
-    int16_t rssi;
-    int8_t snr;
-} lora_rx_info_t;
-
 struct lora_radio {
     const char *name;
 
@@ -113,8 +106,6 @@ int lora_receive_raw(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
                      uint32_t timeout_ms);
 int lora_receive_packet(lora_radio_t *r, lora_packet_t *packet, size_t max_len,
                         uint32_t timeout_ms);
-int lora_receive_info(lora_radio_t *r, lora_rx_info_t *rx_info,
-                      uint32_t timeout_ms);
 
 int lora_sleep(lora_radio_t *r);
 int lora_wakeup(lora_radio_t *r);
