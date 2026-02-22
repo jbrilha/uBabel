@@ -85,7 +85,7 @@ bool spi_hal_read_register_addr(spi_dev_handle_t device, uint8_t addr,
     gpio_set_pin_level(device->cs_pin, 0);
     int ret = spi_write_read_blocking(device->spi_bus, tx_buf, data, len + 1);
     gpio_set_pin_level(device->cs_pin, 1);
-    return ret == len;
+    return ret == (len + 1);
 }
 
 bool spi_hal_read_register_cmd(spi_dev_handle_t device, uint8_t cmd,
@@ -103,14 +103,14 @@ bool spi_hal_read_register_cmd(spi_dev_handle_t device, uint8_t cmd,
     gpio_set_pin_level(device->cs_pin, 0);
     int ret = spi_write_read_blocking(device->spi_bus, tx_buf, rx_data, len + 1);
     gpio_set_pin_level(device->cs_pin, 1);
-    return ret == len;
+    return ret == (len + 1);
 }
 
 bool spi_hal_write_register_addr(spi_dev_handle_t device, uint8_t addr,
                                  const uint8_t *data, size_t len) {
-    uint8_t buf[1 + len];
-    buf[0] = addr;
-    memcpy(&buf[1], data, len);
+    uint8_t tx_buf[1 + len];
+    tx_buf[0] = addr;
+    memcpy(&tx_buf[1], data, len);
 
     // need to manually set the bus speed for this particular device, ESP does
     // this automagically in device_transmit
@@ -118,25 +118,25 @@ bool spi_hal_write_register_addr(spi_dev_handle_t device, uint8_t addr,
 
     // manual CS select (low means slave device is listening)
     gpio_set_pin_level(device->cs_pin, 0);
-    int ret = spi_write_blocking(device->spi_bus, data, len + 1);
+    int ret = spi_write_blocking(device->spi_bus, tx_buf, len + 1);
     gpio_set_pin_level(device->cs_pin, 1);
-    return ret == len;
+    return ret == (len + 1);
 }
 
 bool spi_hal_write_register_cmd(spi_dev_handle_t device, uint8_t cmd,
                                 const uint8_t *data, size_t len) {
 
-    uint8_t buf[1 + len];
-    buf[0] = cmd;
-    memcpy(&buf[1], data, len);
+    uint8_t tx_buf[1 + len];
+    tx_buf[0] = cmd;
+    memcpy(&tx_buf[1], data, len);
 
     spi_set_baudrate(device->spi_bus, device->freq_hz);
 
     // manual CS select (low means slave device is listening)
     gpio_set_pin_level(device->cs_pin, 0);
-    int ret = spi_write_blocking(device->spi_bus, data, len + 1);
+    int ret = spi_write_blocking(device->spi_bus, tx_buf, len + 1);
     gpio_set_pin_level(device->cs_pin, 1);
-    return false;
+    return ret == (len + 1);
 }
 
 spi_dev_cfg_t spi_hal_create_config(int cs_pin, uint32_t clock_speed_hz,
