@@ -64,7 +64,7 @@ static void sx127x_set_DIO_IRQ_params(lora_radio_t *r, uint16_t irq_mask,
 static void sx127x_clear_IRQ_status(lora_radio_t *r, uint16_t irq_mask);
 static void sx127x_set_tx(lora_radio_t *r, uint32_t timeout);
 static void sx127x_set_rx(lora_radio_t *r, uint32_t timeout);
-static int sx127x_read_IRQ_status(lora_radio_t *r);
+static uint16_t sx127x_read_IRQ_status(lora_radio_t *r);
 static int sx127x_transmit(lora_radio_t *r, uint8_t *data, size_t len,
                            uint32_t timeout_ms);
 static int sx127x_receive(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
@@ -508,7 +508,7 @@ static void sx127x_set_rx(lora_radio_t *r, uint32_t timeout) {
                    (MODE_RXCONTINUOUS + 0x80)); // RX on LoRa mode
 }
 
-static int sx127x_read_IRQ_status(lora_radio_t *r) {
+static uint16_t sx127x_read_IRQ_status(lora_radio_t *r) {
     sx127x_t *c = (sx127x_t *)r->chip;
     bool has_CRC;
     uint8_t regdata = read_register(c, REG_IRQFLAGS);
@@ -552,12 +552,12 @@ static int sx127x_transmit(lora_radio_t *r, uint8_t *data, size_t len,
 
     if (timeout_ms == 0) {
         while (!tx_done(c)) {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(1);
         }
     } else {
         start_ms = hal_millis();
         while (!tx_done(c) && ((hal_millis() - start_ms) < timeout_ms)) {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(1);
         }
     }
 
@@ -590,12 +590,12 @@ static int sx127x_receive(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
 
     if (timeout_ms == 0) {
         while (!rx_done(c)) {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(1);
         }
     } else {
         start_ms = hal_millis();
         while (!rx_done(c) && ((hal_millis() - start_ms) < timeout_ms)) {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(1);
         }
     }
 
@@ -658,7 +658,6 @@ lora_radio_t *lora_create_sx127x_radio(void) {
     radio->init = sx127x_driver_init;
     radio->calibrate_image = sx127x_calibrate_image;
     radio->clear_IRQ_status = sx127x_clear_IRQ_status;
-    radio->read_IRQ_status = sx127x_read_IRQ_status;
     // TODO might need to restructure these to not be called in the chip init
     // radio->check_device = sx127x_check_device;
     // radio->reset_device = sx127x_reset_device;

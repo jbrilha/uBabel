@@ -72,7 +72,6 @@ struct lora_radio {
     void (*set_DIO_IRQ_params)(lora_radio_t *r, uint16_t irq_mask,
                                uint16_t dio0_mask, uint16_t dio1_mask,
                                uint16_t dio2_mask);
-    int (*read_IRQ_status)(lora_radio_t *r);
     void (*set_tx)(lora_radio_t *r, uint32_t timeout);
     void (*set_rx)(lora_radio_t *r, uint32_t timeout);
 
