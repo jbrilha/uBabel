@@ -149,19 +149,17 @@ static void lora_sender_task(void *pvParameters) {
     uint8_t tx_len = 0;
     while (i++ < 255) {
         snprintf(msg, sizeof(msg), "HELLO WORLD %d", i);
-        lora_packet_t *pkt =
-            new_lora_packet(0xFF, 0xAB, i, 0x00, (const uint8_t *)msg, sizeof(msg));
+        lora_packet_t *pkt = new_lora_packet(0xFF, 0xAB, i, 0x00,
+                                             (const uint8_t *)msg, sizeof(msg));
         if ((tx_len = lora_transmit_packet(r, pkt, 1000))) {
-            // LOG_WARN(TAG, "SENT");
-            // LOG_INFO(TAG, "Packet sent:");
-            // LOG_INFO(TAG, "  recipient_id: 0x%02X", pkt->recipient_id);
-            // LOG_INFO(TAG, "  sender_id   : 0x%02X", pkt->sender_id);
-            // LOG_INFO(TAG, "  message_id  : %u", pkt->message_id);
-            // LOG_INFO(TAG, "  flags       : 0x%02X", pkt->flags);
-            // LOG_INFO(TAG, "  payload_len : %u", pkt->payload_len);
-            // LOG_INFO(TAG, "  payload str : %.*s", pkt->payload_len,
-            //          pkt->payload);
-
+            LOG_INFO(TAG, "Packet sent:");
+            LOG_INFO(TAG, "  recipient_id: 0x%02X", pkt->recipient_id);
+            LOG_INFO(TAG, "  sender_id   : 0x%02X", pkt->sender_id);
+            LOG_INFO(TAG, "  message_id  : %u", pkt->message_id);
+            LOG_INFO(TAG, "  flags       : 0x%02X", pkt->flags);
+            LOG_INFO(TAG, "  payload_len : %u", pkt->payload_len);
+            LOG_INFO(TAG, "  payload str : %.*s", pkt->payload_len,
+                     pkt->payload);
             event_t *event = create_event(EVENT_TYPE_NOTIFICATION,
                                           UI_EVENT_SND_LORA, pkt, tx_len);
 
@@ -225,8 +223,9 @@ static void lora_receiver_task(void *pvParameters) {
     uint8_t pkt_buf[LORA_MAX_PKT_LENGTH];
     lora_packet_t *pkt = (lora_packet_t *)pkt_buf;
 
+    uint8_t rx_len = 0;
     while (true) {
-        if (lora_receive_packet(r, pkt, LORA_MAX_PKT_LENGTH, 1000)) {
+        if ((rx_len = lora_receive_packet(r, pkt, LORA_MAX_PKT_LENGTH, 1000))) {
             LOG_INFO(TAG, "Packet received:");
             LOG_INFO(TAG, "  recipient_id: 0x%02X", pkt->recipient_id);
             LOG_INFO(TAG, "  sender_id   : 0x%02X", pkt->sender_id);
@@ -236,6 +235,13 @@ static void lora_receiver_task(void *pvParameters) {
 
             LOG_INFO(TAG, "  payload str : %.*s", pkt->payload_len,
                      pkt->payload);
+
+            event_t *event = create_event(EVENT_TYPE_NOTIFICATION,
+                                          UI_EVENT_REC_LORA, pkt, rx_len);
+
+            if (event) {
+                event_dispatcher_post(event);
+            }
         } else {
             LOG_ERROR(TAG, "No packet received");
         }
