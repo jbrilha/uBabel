@@ -184,13 +184,19 @@ static uint8_t read_register(sx126x_t *r, uint16_t address) {
 
 static bool read_buffer(sx126x_t *c, uint8_t offset, uint8_t *data,
                         uint8_t len) {
+    uint8_t rx_buf[2 + len];
     uint8_t tx_buf[2 + len];
     tx_buf[0] = offset;
     tx_buf[1] = 0xFF;
     memset(&tx_buf[2], 0x00, len);
 
-    return spi_hal_read_register_cmd(c->spi_dev, RADIO_READ_BUFFER, data,
-                                     tx_buf, 2 + len);
+    bool ok = spi_hal_read_register_cmd(c->spi_dev, RADIO_READ_BUFFER, rx_buf,
+                                        tx_buf, 2 + len);
+
+    if (ok) {
+        memcpy(data, &rx_buf[2], len);
+    }
+    return ok;
 }
 
 static bool write_buffer(sx126x_t *c, uint8_t offset, const uint8_t *data,
