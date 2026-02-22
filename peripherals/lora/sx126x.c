@@ -5,6 +5,8 @@
 
 #include "sx126x_defs.h"
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 #if CONFIG_IDF_TARGET_ESP32S3
 #define CS_PIN (8)
@@ -184,8 +186,8 @@ static bool read_buffer(sx126x_t *c, uint8_t offset, uint8_t *data,
                         uint8_t len) {
     uint8_t tx_buf[2 + len];
     tx_buf[0] = offset;
-    tx_buf[1] = 0xFF; // NOP after offset
-    memcpy(&tx_buf[2], data, len);
+    tx_buf[1] = 0xFF;
+    memset(&tx_buf[2], 0x00, len);
 
     return spi_hal_read_register_cmd(c->spi_dev, RADIO_READ_BUFFER, data,
                                      tx_buf, 2 + len);
@@ -203,8 +205,12 @@ static bool write_buffer(sx126x_t *c, uint8_t offset, const uint8_t *data,
 
 #define INLINE __attribute__((always_inline)) inline
 
-INLINE static bool rx_done(sx126x_t *c) { return gpio_get_level(c->dio1_pin); }
-INLINE static bool tx_done(sx126x_t *c) { return gpio_get_level(c->dio1_pin); }
+INLINE static bool rx_done(sx126x_t *c) {
+    return gpio_get_pin_level(c->dio1_pin);
+}
+INLINE static bool tx_done(sx126x_t *c) {
+    return gpio_get_pin_level(c->dio1_pin);
+}
 
 static void tx_enable(sx126x_t *c) {
     gpio_set_pin_level(c->rxen_pin, false);

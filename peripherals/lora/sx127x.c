@@ -11,6 +11,7 @@
 #include "sx127x_defs.h"
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 // TODO these are from Arduino, move into HAL or something
 #define set_bit(value, bit) ((value) |= (1UL << (bit)))
@@ -78,8 +79,8 @@ static uint8_t calc_optimization(uint8_t bw, uint8_t sf);
 
 static void write_register(sx127x_t *c, uint8_t address, uint8_t value) {
     uint8_t masked_addr = address | 0x80;
-    if (!spi_hal_write_register(c->spi_dev, masked_addr, &value, 1)) {
-        ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI VAL %d TO ADDR %d", value,
+    if (!spi_hal_write_register_addr(c->spi_dev, masked_addr, &value, 1)) {
+        LOG_ERROR(TAG, "FAILED TO TRANSMIT SPI VAL %d TO ADDR %d", value,
                  address);
     }
 }
@@ -88,17 +89,23 @@ static uint8_t read_register(sx127x_t *c, uint8_t address) {
     uint8_t data;
 
     uint8_t masked_addr = address & 0x7F;
-    if (!spi_hal_read_register(c->spi_dev, masked_addr, &data, 1)) {
-        ESP_LOGE(TAG, "FAILED TO READ SPI VAL FROM ADDR %d", address);
+    if (!spi_hal_read_register_addr(c->spi_dev, masked_addr, &data, 1)) {
+        LOG_ERROR(TAG, "FAILED TO READ SPI VAL FROM ADDR %d", address);
         return 0;
     }
 
     return data;
 }
 
+#define INLINE __attribute__((always_inline)) inline
+
 // TODO might be worth distinguishing with different models
-static bool rx_done(sx127x_t *c) { return gpio_get_level(c->dio0_pin); }
-static bool tx_done(sx127x_t *c) { return gpio_get_level(c->dio0_pin); }
+INLINE static bool rx_done(sx127x_t *c) {
+    return gpio_get_pin_level(c->dio0_pin);
+}
+INLINE static bool tx_done(sx127x_t *c) {
+    return gpio_get_pin_level(c->dio0_pin);
+}
 
 static sx127x_t *sx127x_chip_init_on_pins(lora_radio_t *r, int8_t cs_pin,
                                           int8_t rst_pin, int8_t dio0_pin) {
@@ -540,8 +547,8 @@ static int sx127x_transmit(lora_radio_t *r, uint8_t *data, size_t len,
     // and save in FIFO access ptr
     write_register(c, REG_FIFOADDRPTR, ptr);
 
-    if (!spi_hal_write_reg_buffer(c->spi_dev, WREG_FIFO, data, len)) {
-        ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI");
+    if (!spi_hal_write_register_addr(c->spi_dev, WREG_FIFO, data, len)) {
+        LOG_ERROR(TAG, "FAILED TO TRANSMIT SPI");
         return 0;
     }
 
@@ -614,9 +621,9 @@ static int sx127x_receive(lora_radio_t *r, uint8_t *rx_buf, size_t max_len,
         c->rx_packet_len = max_len;
     }
 
-    if (!spi_hal_read_reg_buffer(c->spi_dev, REG_FIFO, rx_buf,
-                                 c->rx_packet_len)) {
-        ESP_LOGE(TAG, "FAILED TO TRANSMIT SPI");
+    if (!spi_hal_read_register_addr(c->spi_dev, REG_FIFO, rx_buf,
+                                    c->rx_packet_len)) {
+        LOG_ERROR(TAG, "FAILED TO TRANSMIT SPI");
         return 0;
     }
 

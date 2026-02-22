@@ -12,4 +12,4 @@ target_sources(lora INTERFACE
 
 target_include_directories(lora INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
-target_link_libraries(lora INTERFACE pico_stdlib hardware_i2c hardware_spi)
+target_link_libraries(lora INTERFACE pico_stdlib spi_hal gpio_hal)
