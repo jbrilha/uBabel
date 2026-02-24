@@ -1,2 +1,2 @@
 dependencies:
-  esp32-camera: ^2.1.2
+  esp32-camera: ^2.1.5
