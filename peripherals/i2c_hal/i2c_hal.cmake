@@ -1,7 +1,7 @@
 add_library(i2c_hal INTERFACE)
 
 set(I2C_HAL_SOURCES
-  ${CMAKE_CURRENT_LIST_DIR}/i2c_hal.c
+  ${CMAKE_CURRENT_LIST_DIR}/i2c_hal_pico.c
   )
 
 target_sources(i2c_hal INTERFACE

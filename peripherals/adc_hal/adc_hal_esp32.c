@@ -1,8 +1,6 @@
 #include "adc_hal.h"
-#include "platform.h"
-
-#ifdef BUILD_ESP32
 #include "esp_adc/adc_oneshot.h"
+#include "platform.h"
 
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
 static adc_oneshot_unit_handle_t adc2_handle = NULL;
@@ -57,21 +55,7 @@ static const int gpio_to_adc_channel[] = {
 #define MIN_GPIO 1
 #define MAX_GPIO 20
 
-static const int gpio_to_adc_channel[] = {
-};
-#endif
-
-#elif BUILD_PICO
-#include "hardware/adc.h"
-
-#define MIN_GPIO 26
-#define MAX_GPIO 28
-
-static const int gpio_to_adc_channel[] = {
-    [26] = 0, // GPIO26 -> ADC0
-    [27] = 1, // GPIO27 -> ADC1
-    [28] = 2, // GPIO28 -> ADC2
-};
+static const int gpio_to_adc_channel[] = {};
 #endif
 
 const static char *TAG = "ADC_HAL";
@@ -100,7 +84,6 @@ bool adc_init_pin(int pin) {
         return false;
     }
 
-#if BUILD_ESP32
     adc_oneshot_chan_cfg_t config = {
         .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
@@ -123,16 +106,6 @@ bool adc_init_pin(int pin) {
     }
 
     return true;
-#else
-    if (!adc_initialized) {
-        adc_init();
-        adc_initialized = true;
-    }
-
-    // this makes sure GPIO is high-impedance, no pullups etc
-    adc_gpio_init(pin);
-    return true;
-#endif
 }
 
 int adc_get_pin_value(int pin) {
@@ -141,7 +114,6 @@ int adc_get_pin_value(int pin) {
         return -1;
     }
 
-#if BUILD_ESP32
     int val;
     if (pin <= 10) {
         ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, chan, &val));
@@ -150,14 +122,8 @@ int adc_get_pin_value(int pin) {
     }
 
     return val;
-#else
-    adc_select_input(chan);
-
-    return adc_read();
-#endif
 }
 
-#if BUILD_ESP32
 void adc_deinit_pin(int pin) {
     if (pin <= 10) {
         ESP_ERROR_CHECK(adc_oneshot_del_unit(adc1_handle));
@@ -165,4 +131,3 @@ void adc_deinit_pin(int pin) {
         ESP_ERROR_CHECK(adc_oneshot_del_unit(adc2_handle));
     }
 }
-#endif

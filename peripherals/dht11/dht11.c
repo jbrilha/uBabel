@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "gpio_hal.h"
+#include "time_hal.h"
 #include "platform.h"
 
 #define DHT_TASK_NAME "dht_task"

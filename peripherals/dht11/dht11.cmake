@@ -10,4 +10,4 @@ target_sources(dht11 INTERFACE
 
 target_include_directories(dht11 INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
-target_link_libraries(dht11 INTERFACE pico_stdlib hardware_gpio gpio_hal)
+target_link_libraries(dht11 INTERFACE pico_stdlib gpio_hal time_hal)

@@ -7,6 +7,7 @@
 #include "gpio_hal.h"
 #include "lora.h"
 #include "spi_hal.h"
+#include "time_hal.h"
 
 #include "sx127x_defs.h"
 #include <math.h>

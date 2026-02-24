@@ -1,7 +1,7 @@
 add_library(adc_hal INTERFACE)
 
 set(ADC_HAL_SOURCES
-  ${CMAKE_CURRENT_LIST_DIR}/adc_hal.c
+  ${CMAKE_CURRENT_LIST_DIR}/adc_hal_pico.c
   )
 
 target_sources(adc_hal INTERFACE
