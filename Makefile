@@ -77,4 +77,6 @@ target-esp32s3:
 
 target-esp32c6:
 	idf.py -B $(ESP32_BUILD_DIR) set-target esp32c6
-	cp sdkconfig.esp32c6 sdkconfig
+
+target-esp32c5:
+	idf.py -B $(ESP32_BUILD_DIR) set-target esp32c5
