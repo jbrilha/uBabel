@@ -1,8 +1,10 @@
 #include "ble_peripheral.h"
 #include "ble_utils.h"
+#include "gatt_server.h"
 
 #include "host/util/util.h"
 #include "nimble/ble.h"
+#include "services/gap/ble_svc_gap.h"
 
 static const char *TAG = "BLE_PERIPHERAL";
 
