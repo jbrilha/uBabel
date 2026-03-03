@@ -10,7 +10,9 @@ char *addr_str(const void *addr);
 // void ble_print_uuid(const ble_uuid_t *uuid);
 void ble_print_conn_desc(const struct ble_gap_conn_desc *desc);
 void ble_print_adv_fields(const struct ble_hs_adv_fields *fields);
+#if CONFIG_UBABEL_BLE_EXTENDED_ADV
 void ble_print_ext_adv_report(const void *param);
+#endif
 
 #define PEER_ADDR_VAL_SIZE 6
 

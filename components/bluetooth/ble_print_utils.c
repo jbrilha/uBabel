@@ -29,6 +29,7 @@ static void ble_print_addr_name(const void *addr, const char *name) {
              u8p[3], u8p[2], u8p[1], u8p[0]);
 }
 
+#if CONFIG_UBABEL_BLE_EXTENDED_ADV
 void ble_print_ext_adv_report(const void *param) {
     const struct ble_gap_ext_disc_desc *disc =
         (struct ble_gap_ext_disc_desc *)param;
@@ -42,6 +43,7 @@ void ble_print_ext_adv_report(const void *param) {
              disc->periodic_adv_itvl, disc->length_data);
     ble_print_addr_name(disc->direct_addr.val, "direct address");
 }
+#endif
 
 char *addr_str(const void *addr) {
     static char buf[6 * 2 + 5 + 1];
