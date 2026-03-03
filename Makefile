@@ -2,6 +2,13 @@
 
 all: pico esp32
 
+IDF_PY = sh -c ' \
+	if ! command -v idf.py >/dev/null 2>&1; then \
+		. $$HOME/esp/esp-idf/export.sh; \
+	fi; \
+	exec idf.py "$$@" \
+' --
+
 PICO_BUILD_DIR := build_pico
 ESP32_BUILD_DIR := build_esp32
 
@@ -16,22 +23,22 @@ pico:
 
 esp32:
 	@echo "Building for ESP32..."
-	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 build
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 m5core:
 	@echo "Building for M5Stack Core Basic..."
-	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 build
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 m5core-sender:
 	@echo "Building for M5Stack Core Basic..."
-	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_SENDER=1 -DM5STACK_RECEIVER=0 build
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_SENDER=1 -DM5STACK_RECEIVER=0 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 m5core-receiver:
 	@echo "Building for M5Stack Core Basic..."
-	idf.py -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_SENDER=0 -DM5STACK_RECEIVER=1 build
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 -DM5STACK_SENDER=0 -DM5STACK_RECEIVER=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
 
@@ -51,32 +58,40 @@ flash-pico:
 
 flash-esp32:
 	@echo "Flashing ESP32..."
-	idf.py -B $(ESP32_BUILD_DIR) flash
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) flash
 
 monitor-esp32:
 	@echo "Starting ESP32 monitor..."
-	idf.py monitor
+	@$(IDF_PY) monitor
 
 menu: menuconfig
 
+fullclean:
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) fullclean
+
 menuconfig:
-	idf.py -B $(ESP32_BUILD_DIR) menuconfig
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) menuconfig
 
 erase-flash:
-	idf.py -B $(ESP32_BUILD_DIR) erase-flash
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) erase-flash
 
 target-esp32:
-	idf.py -B $(ESP32_BUILD_DIR) set-target esp32
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32
 
 target-m5core:
-	idf.py -B $(ESP32_BUILD_DIR) set-target esp32
-	cp sdkconfig.m5core sdkconfig
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32
 
-target-esp32s3:
-	idf.py -B $(ESP32_BUILD_DIR) set-target esp32s3
+target-esp32c3:
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32c3
 
 target-esp32c6:
-	idf.py -B $(ESP32_BUILD_DIR) set-target esp32c6
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32c6
 
 target-esp32c5:
-	idf.py -B $(ESP32_BUILD_DIR) set-target esp32c5
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32c5
+
+target-esp32s3:
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32s3
+
+target-esp32p4:
+	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32p4
