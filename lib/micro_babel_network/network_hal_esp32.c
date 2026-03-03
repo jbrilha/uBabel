@@ -1,15 +1,20 @@
 #include "esp_netif_types.h"
 #include "esp_wifi_types_generic.h"
+#include "event_dispatcher.h"
+#include "network_events.h"
 #include "network_hal.h"
 
 #define MAX_CONNECTIONS 10
 
 static bool esp32_wifi_initialized = false;
+static bool esp32_wifi_started = false;
 static bool esp32_scan_done = false;
 static bool esp32_scan_active = false;
 static esp_netif_t *esp_netif_sta = NULL;
 static esp_netif_t *esp_netif_ap = NULL;
 static scan_callback_t esp32_scan_callback = NULL;
+
+static uint32_t stored_ip = 0;
 
 static EventGroupHandle_t wifi_event_group;
 
@@ -36,6 +41,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "L2 connected");
         break;
     case WIFI_EVENT_STA_DISCONNECTED:
+            stored_ip = 0;
         if (reconnect) {
             ESP_LOGI(TAG, "sta disconnect, reconnect...");
             esp_wifi_connect();
@@ -53,11 +59,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 static void ip_event_handler(void *arg, esp_event_base_t event_base,
                              int32_t event_id, void *event_data) {
     switch (event_id) {
-    case IP_EVENT_STA_GOT_IP:
+    case IP_EVENT_STA_GOT_IP: {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        stored_ip = event->ip_info.ip.addr;
         xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
         ESP_LOGI(TAG, "DHCP gave us an IP");
         break;
+    }
     default:
         break;
     }
@@ -73,6 +82,8 @@ int network_hal_init(void) {
 
     // Create event group once
     wifi_event_group = xEventGroupCreate();
+    esp_netif_sta = esp_netif_create_default_wifi_sta();
+    esp_netif_ap = esp_netif_create_default_wifi_ap();
 
     // Register handler for WIFI events (including scan + STA disconnect)
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
@@ -95,7 +106,10 @@ void network_hal_enable_sta_mode(void) {
     }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    if (!esp32_wifi_started) {
+        ESP_ERROR_CHECK(esp_wifi_start());
+        esp32_wifi_started = true;
+    }
 }
 
 void network_hal_enable_ap_mode(const char *ssid, const char *password) {
@@ -131,15 +145,13 @@ void network_hal_enable_ap_mode(const char *ssid, const char *password) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+    esp32_wifi_started = true;
 }
 
 bool network_hal_connect_wifi(const char *ssid, const char *password,
                               int timeout_ms) {
     bool open = !(password && strlen(password));
     int auth = open ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
-
-    int bits =
-        xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, 0, 1, 0);
 
     wifi_config_t wifi_config = {0};
 
@@ -159,20 +171,11 @@ bool network_hal_connect_wifi(const char *ssid, const char *password,
     wifi_config.sta.pmf_cfg.capable = true;
     wifi_config.sta.pmf_cfg.required = false;
 
-    // Ensure STA netif exists and WiFi is in STA mode + started
-    // network_hal_enable_sta_mode();
-
     // reset connection if connecting to new AP
-    if (bits & WIFI_CONNECTED_BIT) {
-        reconnect = false;
-        xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
-        ESP_ERROR_CHECK(esp_wifi_disconnect());
-        xEventGroupWaitBits(wifi_event_group, WIFI_DISCONNECTED_BIT, 0, 1,
-                            portTICK_PERIOD_MS);
-    }
+    ESP_ERROR_CHECK(esp_wifi_disconnect());
+    xEventGroupWaitBits(wifi_event_group, WIFI_DISCONNECTED_BIT, 0, 1,
+                        pdMS_TO_TICKS(2000));
 
-    reconnect = true;
-    esp_wifi_disconnect();
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
 
     esp_err_t result = esp_wifi_connect();
@@ -181,7 +184,7 @@ bool network_hal_connect_wifi(const char *ssid, const char *password,
     }
 
     // Wait for CONNECTED or DISCONNECTED or timeout
-    bits = xEventGroupWaitBits(
+    EventBits_t bits = xEventGroupWaitBits(
         wifi_event_group, WIFI_CONNECTED_BIT | WIFI_DISCONNECTED_BIT,
         pdTRUE,  // clear bits on exit
         pdFALSE, // wait for either bit
@@ -189,11 +192,11 @@ bool network_hal_connect_wifi(const char *ssid, const char *password,
 
     if (bits & WIFI_CONNECTED_BIT) {
         return true; // success: got IP
-    } else {
-        // either FAIL bit set or timeout
-        esp_wifi_disconnect();
-        return false;
     }
+
+    // either FAIL bit set or timeout
+    esp_wifi_disconnect();
+    return false;
 }
 
 void network_hal_disconnect_wifi(void) {
@@ -227,24 +230,12 @@ int network_hal_link_status(void) {
 }
 
 uint32_t network_hal_get_local_ip(void) {
-    int bits =
-        xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, 0, 1, 0);
-    esp_netif_t *ifx = esp_netif_sta;
-    esp_netif_ip_info_t ip_info;
-    wifi_mode_t mode;
+    return stored_ip;
+}
 
-    esp_wifi_get_mode(&mode);
-    if (WIFI_MODE_STA == mode) {
-        bits =
-            xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, 0, 1, 0);
-        if (bits & WIFI_CONNECTED_BIT) {
-            ifx = esp_netif_sta;
-        } else {
-            ESP_LOGE(TAG, "sta has no IP");
-            return 0;
-        }
-    }
-
-    esp_netif_get_ip_info(ifx, &ip_info);
-    return ip_info.ip.addr;
+bool network_hal_wait_for_ip(uint32_t timeout_ms) {
+    EventBits_t bits = xEventGroupWaitBits(
+        wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE,
+        timeout_ms == 0 ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms));
+    return (bits & WIFI_CONNECTED_BIT);
 }

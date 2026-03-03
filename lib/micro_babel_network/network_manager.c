@@ -97,7 +97,7 @@ static bool try_connect_wifi(const wifi_credentials_t *creds) {
     LOG_INFO(TAG, "Trying SSID: %s (%s)\n", creds->ssid,
            strlen(creds->pass) ? "secured" : "open");
 
-    return network_hal_connect_wifi(creds->ssid, creds->pass, 10000) == 0;
+    return network_hal_connect_wifi(creds->ssid, creds->pass, 10000);
 }
 
 /* static int scan_result(void *env, const cyw43_ev_scan_result_t *result) {
@@ -469,7 +469,7 @@ void network_manager_task(void *params) {
                         LOG_INFO(TAG, "Trying to connect to open network: %s\n",
                                current->ssid);
                         if (network_hal_connect_wifi(current->ssid, NULL,
-                                                          10000) == 0) {
+                                                          10000)) {
                             struct netif *netif = netif_list;
                             while (netif != NULL && !is_candidate_wifi_interface(netif)) {
                                 netif = netif->next;

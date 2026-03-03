@@ -30,5 +30,6 @@ void network_hal_poll(void);
 int network_hal_link_status(void);
 
 uint32_t network_hal_get_local_ip(void);
+bool network_hal_wait_for_ip(uint32_t timeout_ms);
 
 #endif // NETWORK_HAL_H
