@@ -2,6 +2,7 @@
 **.DS_Store
 compile_commands.json
 sdkconfig.old
+sdkconfig
 build*/
 .cache/
 .pio
