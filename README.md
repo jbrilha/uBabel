@@ -4,7 +4,7 @@
 
 ### ESP-IDF
 
-``` bash
+```bash
 mkdir -p ~/esp
 cd ~/esp
 
@@ -16,13 +16,12 @@ cd esp-idf
 . ./export.sh
 
 # RECOMMENDED
-echo "alias get_idf='. $HOME/esp/esp-idf/export.sh'" >> ~/.bashrc
-# you MUST do this every time you open a terminal session to build for the ESPs otherwise the Makefile will NOT work
+echo "alias get_idf='. $HOME/esp/esp-idf/export.sh'" >> ~/.bashrc # or ~/.zshrc, etc.
 ```
 
 ### PICO-SDK
 
-``` bash
+```bash
 mkdir ~/pico
 cd ~/pico
 
@@ -31,14 +30,15 @@ cd pico-sdk
 
 git submodule update --init
 
-echo "export PICO_SDK_PATH=~/pico/pico-sdk/" >> ~/.bashrc
+echo "export PICO_SDK_PATH=~/pico/pico-sdk/" >> ~/.bashrc # or ~/.zshrc, etc.
 ```
 
-Also recommend installing ```picotool```
+`picotool` is not mandatory but highly recommended (especially to use the Makefile).
+It's likely available in your OS's package manager, but installation instructions can be found [here](https://github.com/raspberrypi/picotool?tab=readme-ov-file#building--installing).
 
 ### FreeRTOS (to use with pico-sdk)
 
-``` bash
+```bash
 mkdir ~/FreeRTOS/
 cd ~/FreeRTOS
 
@@ -47,43 +47,24 @@ git clone --depth=1 https://github.com/raspberrypi/FreeRTOS-Kernel.git
 echo "export FREERTOS_KERNEL_PATH=~/FreeRTOS/FreeRTOS-Kernel/" >> ~/.bashrc
 ```
 
-## Building
+## Building & Flashing
+
+We use two separate build directories for the ESP32 and Pico, so it's recommended to use the `Makefile`.
 
 ### For ESP32
 
-``` bash
-# get_idf
-idf.py set-target esp32 # or esp32s3, etc
-idf.py build
-idf.py flash # idf.py -p PORT flash
-idf.py monitor # idf.py -p PORT monitor
-```
-
-or
-
-``` bash
-# get_idf
+```bash
+get_idf # if you set the alias earlier
 make clean-esp32
-idf.py set-target esp32 # or esp32s3, etc
-make esp32
+make target-<chip> # esp32, esp32s3, etc.
+make build-esp32
 make flash-esp32
 ```
 
-### For Pico W 
-``` bash
-rm -rf build
-mkdir build
-cd build
-cmake ..
-make
+### For Pico W
 
-picotool load -f main/micro-babel.uf2
-```
-
-or
-
-``` bash
+```bash
 make clean-pico
-make pico
+make build-pico
 make flash-pico
 ```

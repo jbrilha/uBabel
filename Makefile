@@ -1,6 +1,6 @@
-.PHONY: all clean pico esp32 pico-clean esp32-clean flash-pico flash-esp32 monitor-esp32 menu menuconfig m5core target-esp32 target-esp32s3 target-esp32c6
+.PHONY: all clean build-pico build-esp32 clean-pico clean-esp32 flash-pico flash-esp32 monitor-esp32 menu menuconfig build-m5core target-esp32 target-esp32c3 target-esp32c5 target-esp32c6 target-esp32s3 target-esp32p4
 
-all: pico esp32
+all: build-pico build-esp32
 
 IDF_PY = sh -c ' \
 	if ! command -v idf.py >/dev/null 2>&1; then \
@@ -12,21 +12,21 @@ IDF_PY = sh -c ' \
 PICO_BUILD_DIR := build_pico
 ESP32_BUILD_DIR := build_esp32
 
-all-esp32: clean-esp32 esp32 flash-esp32 monitor-esp32
-all-pico: clean-pico pico flash-pico
+all-esp32: clean-esp32 build-esp32 flash-esp32
+all-pico: clean-pico buildpico flash-pico
 
-pico:
+build-pico:
 	@echo "Building for Pico..."
 	@mkdir -p $(PICO_BUILD_DIR)
 	cd $(PICO_BUILD_DIR) && cmake -DBUILD_PICO=1 .. && make
 	ln -sf $(PICO_BUILD_DIR)/compile_commands.json compile_commands.json
 
-esp32:
+build-esp32:
 	@echo "Building for ESP32..."
 	@$(IDF_PY) -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
 
-m5core:
+build-m5core:
 	@echo "Building for M5Stack Core Basic..."
 	@$(IDF_PY) -B $(ESP32_BUILD_DIR) -DBUILD_ESP32=1 -DM5STACK_CORE_BASIC=1 build
 	ln -sf $(ESP32_BUILD_DIR)/compile_commands.json compile_commands.json
@@ -79,7 +79,7 @@ target-esp32:
 	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32
 
 target-m5core:
-	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32
+	target-esp32
 
 target-esp32c3:
 	@$(IDF_PY) -B $(ESP32_BUILD_DIR) set-target esp32c3
