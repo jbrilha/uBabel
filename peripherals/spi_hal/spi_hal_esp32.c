@@ -31,6 +31,10 @@
 #define MISO_PIN 25
 #define SCLK_PIN 23
 #define MOSI_PIN 24
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+#define MISO_PIN 22
+#define SCLK_PIN 5
+#define MOSI_PIN 6
 #endif
 
 static const char *TAG = "SPI_HAL";
