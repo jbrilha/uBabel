@@ -22,6 +22,7 @@ static void ble_print_addr(const void *addr) {
              u8p[2], u8p[1], u8p[0]);
 }
 
+#if CONFIG_UBABEL_BLE_EXTENDED_ADV
 static void ble_print_addr_name(const void *addr, const char *name) {
     const uint8_t *u8p;
     u8p = addr;
@@ -29,7 +30,6 @@ static void ble_print_addr_name(const void *addr, const char *name) {
              u8p[3], u8p[2], u8p[1], u8p[0]);
 }
 
-#if CONFIG_UBABEL_BLE_EXTENDED_ADV
 void ble_print_ext_adv_report(const void *param) {
     const struct ble_gap_ext_disc_desc *disc =
         (struct ble_gap_ext_disc_desc *)param;
