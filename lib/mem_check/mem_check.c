@@ -14,7 +14,7 @@ static const char *TAG = "MEM_CHECK";
 #include "esp_partition.h"
 #include "esp_system.h"
 
-void mem_check(void) {
+void run_mem_check(void) {
     size_t total_sram = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
     size_t free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     LOG_INFO(TAG, "SRAM:\t\t%d / %d KB", free_sram / 1024, total_sram / 1024);
@@ -41,7 +41,7 @@ void mem_check(void) {
 }
 #elif defined(BUILD_PICO)
 
-void mem_check(void) {
+void run_mem_check(void) {
 #ifdef PICO_RP2350
     bool is_2350 = true;
 #else
@@ -66,7 +66,7 @@ void mem_check(void) {
 #endif
 
 void mem_check_task(void *params) {
-    mem_check();
+    run_mem_check();
 
     vTaskDelete(NULL);
 }
