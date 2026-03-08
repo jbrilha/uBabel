@@ -29,4 +29,6 @@ void gpio_set_pin_level(int pin, bool high);
 
 int gpio_get_pin_level(int pin);
 
+void gpio_toggle_pin(int pin);
+
 #endif // !GPIO_HAL_H

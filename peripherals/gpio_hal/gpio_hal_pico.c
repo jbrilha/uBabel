@@ -13,3 +13,5 @@ void gpio_set_pin_dir(int pin, int dir) { gpio_set_dir(pin, dir); }
 void gpio_set_pin_level(int pin, bool high) { gpio_put(pin, high); }
 
 int gpio_get_pin_level(int pin) { return gpio_get(pin); }
+
+void gpio_toggle_pin(int pin) { gpio_set(pin, !gpio_get(pin)); }

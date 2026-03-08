@@ -1,3 +1,4 @@
+#include "driver/gpio.h"
 #include "gpio_hal.h"
 
 void gpio_init_pin(int pin) {
@@ -8,16 +9,10 @@ void gpio_init_pin(int pin) {
     gpio_config(&io_conf);
 }
 
-void gpio_set_pin_dir(int pin, int dir) {
-    gpio_set_direction(pin, dir);
-}
+void gpio_set_pin_dir(int pin, int dir) { gpio_set_direction(pin, dir); }
 
-// true = high
-// false = low
-void gpio_set_pin_level(int pin, bool high) {
-    gpio_set_level(pin, high);
-}
+void gpio_set_pin_level(int pin, bool high) { gpio_set_level(pin, high); }
 
-int gpio_get_pin_level(int pin) {
-    return gpio_get_level(pin);
-}
+int gpio_get_pin_level(int pin) { return gpio_get_level(pin); }
+
+void gpio_toggle_pin(int pin) { gpio_set_level(pin, !gpio_get_level(pin)); }
