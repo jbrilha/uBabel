@@ -45,3 +45,14 @@ CONFIG_LCD_ORIENTATION_LANDSCAPE_90=y
 # default:
 CONFIG_LCD_MIRROR_Y=0
 # end of LCD / Touch Configuration
+
+#
+# Zigbee
+#
+CONFIG_ZB_ENABLED=y
+# CONFIG_ZB_ZCZR is not set
+CONFIG_ZB_ZED=y
+# CONFIG_ZB_ZGPD is not set
+CONFIG_ZB_RADIO_NATIVE=y
+# CONFIG_ZB_RADIO_SPINEL_UART is not set
+
