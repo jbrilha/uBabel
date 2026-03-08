@@ -44,7 +44,7 @@ cd ~/FreeRTOS
 
 git clone --depth=1 https://github.com/raspberrypi/FreeRTOS-Kernel.git
 
-echo "export FREERTOS_KERNEL_PATH=~/FreeRTOS/FreeRTOS-Kernel/" >> ~/.bashrc
+echo "export FREERTOS_KERNEL_PATH=~/FreeRTOS/FreeRTOS-Kernel/" >> ~/.bashrc # or ~/.zshrc, etc.
 ```
 
 ## Building & Flashing
