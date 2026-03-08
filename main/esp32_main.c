@@ -5,15 +5,17 @@
 #include "mem_check.h"
 #include "nvs_flash.h"
 
+#include "esp32c6_buttons.h"
 #include "event_dispatcher.h"
 #include "network_manager.h"
 #include "platform.h"
 
-#include "lora.h"
-#include "sx126x.h"
 #include "i2c_hal.h"
+#include "iperf_hal.h"
+#include "lora.h"
 #include "sd_card.h"
 #include "spi_hal.h"
+#include "sx126x.h"
 #include "ui_manager.h"
 
 #include "comm_manager.h"
@@ -24,67 +26,63 @@
 #include "proto_iot_control.h"
 #include "proto_simple_overlay.h"
 
-#include "bmp280.h"
-#include "camera.h"
-#include "dht11.h"
-#include "lcd16x2.h"
-#include "mma7660.h"
-#include "paj7620.h"
-#include "tca9548.h"
+#include "bt_host.h"
+#include "zigbee.h"
 
 static const char *TAG = "ESP32_MAIN";
 
-void init_peripherals(void) {
-    spi_hal_master_init();
-    
-    lora_radio_t *r = lora_create_sx126x_radio();
-    if (lora_init(r)) {
-        ESP_LOGI(TAG, "SUCCESS");
-    } else {
-        ESP_LOGE(TAG, "FUCK");
+static lora_radio_t *r = NULL;
+
+bool init_lora(void) {
+    r = lora_create_sx126x_radio();
+    if (r && lora_init(r)) {
+        ESP_LOGW(TAG, "SUCCESS");
+        return true;
     }
+    ESP_LOGE(TAG, "FUCK");
+    return false;
+}
+
+void init_peripherals(void) {
+    i2c_init_default();
+    spi_hal_master_init();
 
     // ui_manager_init();
 
-    // mount_sdmmc_card_1w(SDMMC_CLK_PIN, SDMMC_CMD_PIN, SDMMC_D0_PIN);
-    // ui_manager_set_tardis_widget();
+    if (init_lora()) {
+        lora_start_sender(r);
+        ui_manager_set_lora_sndr_widget();
+        // lora_start_receiver(r);
+        // ui_manager_set_lora_rec_widget();
+    }
+#if CONFIG_IDF_TARGET_ESP32C6
+    esp32c6_buttons_init();
+    run_esp32c6_buttons_task();
 
-    // i2c_init_default();
-
-    // TCA9548_init();
-    // TCA9548_open_all_channels();
+    ui_manager_set_tardis_widget();
+#endif
 }
 
 void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
 
-    xTaskCreate(mem_check_task,   // Task function
-                "mem_check_task", // Task name
-                4096,             // Stack size in words
-                NULL,             // Task parameters
-                1,                // Priority
-                NULL              // Task handle
-    );
-
-    // event_dispatcher_init();
-    // comm_manager_init();
+    event_dispatcher_init();
+    comm_manager_init();
     init_peripherals();
 
-    // this provides a live feed @ ~25 FPS
-    // ui_manager_set_camera_widget();
-    // run_camera_task();
-    // run_sd_card_task();
+    xTaskCreate(network_manager_task, "NetworkManager", 4096, NULL, 5, NULL);
 
-    // xTaskCreate(network_manager_task, // Task function
-    //             "NetworkManager",     // Task name
-    //             4096,                 // Stack size in words
-    //             NULL,                 // Task parameters
-    //             5,                    // Priority
-    //             NULL                  // Task handle
-    // );
-    //
-    // simple_overlay_network_init();
-    // iot_control_protocol_init();
+    simple_overlay_network_init();
+    iot_control_protocol_init();
+
+    vTaskDelay(500);
+    bt_host_init_as_peripheral();
+
+    vTaskDelay(500);
+    zigbee_start();
+
+    vTaskDelay(1000);
+    run_mem_check();
 
     vTaskDelete(NULL);
 }
