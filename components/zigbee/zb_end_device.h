@@ -3,8 +3,6 @@
 
 #include "esp_zigbee_core.h"
 
-void zb_ed_task(void* params);
-
 #define ED_AGING_TIMEOUT                ESP_ZB_ED_AGING_TIMEOUT_64MIN        /* aging timeout of device */
 #define ED_KEEP_ALIVE                   3000                                 /* 3000 millisecond */
 #define HA_ESP_LIGHT_ENDPOINT           10                                   /* esp light bulb device endpoint, used to process light controlling commands */

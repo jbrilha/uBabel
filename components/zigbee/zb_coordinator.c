@@ -179,9 +179,9 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct) {
     }
 }
 
-void zb_coordinator_task(void *params) {
+static void zb_coordinator_task(void *params) {
     /* initialize Zigbee stack */
-    esp_zb_cfg_t zb_nwk_cfg = ZB_COODINATOR_CONFIG();
+    esp_zb_cfg_t zb_nwk_cfg = ZB_COORDINATOR_CONFIG();
     esp_zb_init(&zb_nwk_cfg);
     esp_zb_on_off_switch_cfg_t switch_cfg =
         ESP_ZB_DEFAULT_ON_OFF_SWITCH_CONFIG();

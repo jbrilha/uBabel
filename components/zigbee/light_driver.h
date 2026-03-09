@@ -38,13 +38,20 @@
 #pragma once
 
 #include <stdbool.h>
+#include <driver/gpio.h>
 
 /* light intensity level */
 #define LIGHT_DEFAULT_ON 1
 #define LIGHT_DEFAULT_OFF 0
 
 /* LED strip configuration */
-#define LED_GPIO 8
+#if CONFIG_IDF_TARGET_ESP32C6
+#define LED_GPIO GPIO_NUM_8
+#elif CONFIG_IDF_TARGET_ESP32C5
+#define LED_GPIO GPIO_NUM_15
+#else
+#define LED_GPIO GPIO_NUM_15
+#endif
 
 /**
  * @brief Set light power (on/off).

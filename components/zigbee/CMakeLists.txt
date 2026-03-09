@@ -13,4 +13,3 @@ idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS "."
                     PRIV_REQUIRES ieee802154 espressif__esp-zigbee-lib esp_driver_gpio
 )
-

@@ -127,7 +127,7 @@ static esp_err_t zb_action_handler(esp_zb_core_action_callback_id_t callback_id,
     return ret;
 }
 
-void zb_ed_task(void *params) {
+static void zb_ed_task(void *params) {
     /* initialize Zigbee stack */
     esp_zb_cfg_t zb_nwk_cfg = ZB_END_DEV_CONFIG();
     esp_zb_init(&zb_nwk_cfg);

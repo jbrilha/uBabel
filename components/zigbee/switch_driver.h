@@ -38,12 +38,15 @@
 
 #include "driver/gpio.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* user should configure which I/O port as toggle switch input, default is GPIO9 */
+
+#if CONFIG_IDF_TARGET_ESP32C6
 #define GPIO_INPUT_IO_TOGGLE_SWITCH  GPIO_NUM_9
+#elif CONFIG_IDF_TARGET_ESP32C5
+#define GPIO_INPUT_IO_TOGGLE_SWITCH  GPIO_NUM_28
+#else
+#define GPIO_INPUT_IO_TOGGLE_SWITCH  GPIO_NUM_28
+#endif
 
 /* config button level depends on the pull up/down setting
    push button level is on level = 1 when pull-down enable
@@ -88,7 +91,3 @@ typedef void (*esp_switch_callback_t)(switch_func_pair_t *param);
  * @param cb                    callback pointer.
  */
 bool switch_driver_init(switch_func_pair_t *button_func_pair, uint8_t button_num, esp_switch_callback_t cb);
-
-#ifdef __cplusplus
-} // extern "C"
-#endif
