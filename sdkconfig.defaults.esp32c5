@@ -41,6 +41,15 @@ CONFIG_ZB_ZED=y
 CONFIG_ZB_RADIO_NATIVE=y
 # CONFIG_ZB_RADIO_SPINEL_UART is not set
 
+#
+# Zigbee Example
+#
+# CONFIG_ZB_GP_ENABLED is not set
+# end of Zigbee Example
+
+# CONFIG_ZB_DEBUG_MODE is not set
+# end of Zigbee
+
 # Partition Table
 #
 # CONFIG_PARTITION_TABLE_SINGLE_APP is not set
