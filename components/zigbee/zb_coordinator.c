@@ -2,6 +2,9 @@
 #include "esp_check.h"
 #include "ha/esp_zigbee_ha_standard.h"
 #include "switch_driver.h"
+#include "ubabel_zigbee_proto.h"
+#include "zb_end_device.h"
+#include "zcl/esp_zigbee_zcl_common.h"
 #include "zcl_utility.h"
 #include "zigbee.h"
 
@@ -11,11 +14,11 @@
 
 static const char *TAG = "ZB_COORDINATOR";
 
-typedef struct light_bulb_device_params_s {
+typedef struct ubabel_dev_params_s {
     esp_zb_ieee_addr_t ieee_addr;
     uint8_t endpoint;
     uint16_t short_addr;
-} light_bulb_device_params_t;
+} ubabel_dev_params_t;
 
 static switch_func_pair_t button_func_pair[] = {
     {GPIO_INPUT_IO_TOGGLE_SWITCH, SWITCH_ONOFF_TOGGLE_CONTROL}};
@@ -52,8 +55,7 @@ static void bind_cb(esp_zb_zdp_status_t zdo_status, void *user_ctx) {
     if (zdo_status == ESP_ZB_ZDP_STATUS_SUCCESS) {
         ESP_LOGI(TAG, "Bound successfully!");
         if (user_ctx) {
-            light_bulb_device_params_t *light =
-                (light_bulb_device_params_t *)user_ctx;
+            ubabel_dev_params_t *light = (ubabel_dev_params_t *)user_ctx;
             ESP_LOGI(TAG,
                      "The light originating from address(0x%x) on endpoint(%d)",
                      light->short_addr, light->endpoint);
@@ -67,9 +69,8 @@ static void user_find_cb(esp_zb_zdp_status_t zdo_status, uint16_t addr,
     if (zdo_status == ESP_ZB_ZDP_STATUS_SUCCESS) {
         ESP_LOGI(TAG, "Found light");
         esp_zb_zdo_bind_req_param_t bind_req;
-        light_bulb_device_params_t *light =
-            (light_bulb_device_params_t *)malloc(
-                sizeof(light_bulb_device_params_t));
+        ubabel_dev_params_t *light =
+            (ubabel_dev_params_t *)malloc(sizeof(ubabel_dev_params_t));
         light->endpoint = endpoint;
         light->short_addr = addr;
         esp_zb_ieee_address_by_short(light->short_addr, light->ieee_addr);
@@ -179,6 +180,38 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct) {
     }
 }
 
+static esp_err_t
+zb_attribute_handler(const esp_zb_zcl_set_attr_value_message_t *message) {
+    ESP_RETURN_ON_FALSE(message, ESP_FAIL, TAG, "Empty message");
+    ESP_RETURN_ON_FALSE(
+        message->info.status == ESP_ZB_ZCL_STATUS_SUCCESS, ESP_ERR_INVALID_ARG,
+        TAG, "Received message: error status(%d)", message->info.status);
+
+    if (message->info.cluster == UBABEL_CUSTOM_CLUSTER_ID) {
+        if (message->attribute.id == UBABEL_ATTR_SENSOR_READING_ID) {
+            uint16_t reading = *(uint16_t *)message->attribute.data.value;
+            ESP_LOGI(TAG, "Sensor reading on endpoint(%d): %d",
+                     message->info.dst_endpoint, reading);
+        }
+    }
+    return ESP_OK;
+}
+
+static esp_err_t zb_action_handler(esp_zb_core_action_callback_id_t callback_id,
+                                   const void *message) {
+    esp_err_t ret = ESP_OK;
+    switch (callback_id) {
+    case ESP_ZB_CORE_SET_ATTR_VALUE_CB_ID:
+        ret = zb_attribute_handler(
+            (esp_zb_zcl_set_attr_value_message_t *)message);
+        break;
+    default:
+        ESP_LOGW(TAG, "Receive Zigbee action(0x%x) callback", callback_id);
+        break;
+    }
+    return ret;
+}
+
 static void zb_coordinator_task(void *params) {
     /* initialize Zigbee stack */
     esp_zb_cfg_t zb_nwk_cfg = ZB_COORDINATOR_CONFIG();
@@ -187,6 +220,20 @@ static void zb_coordinator_task(void *params) {
         ESP_ZB_DEFAULT_ON_OFF_SWITCH_CONFIG();
     esp_zb_ep_list_t *esp_zb_on_off_switch_ep =
         esp_zb_on_off_switch_ep_create(HA_ONOFF_SWITCH_ENDPOINT, &switch_cfg);
+
+    esp_zb_attribute_list_t *custom_cluster =
+        esp_zb_zcl_attr_list_create(UBABEL_CUSTOM_CLUSTER_ID);
+    uint16_t sensor_val = 0;
+    esp_zb_custom_cluster_add_custom_attr(
+        custom_cluster, UBABEL_ATTR_SENSOR_READING_ID,
+        ESP_ZB_ZCL_ATTR_TYPE_U16, ESP_ZB_ZCL_ATTR_ACCESS_READ_WRITE,
+        &sensor_val);
+
+    esp_zb_cluster_list_t *cluster_list = esp_zb_ep_list_get_ep(
+        esp_zb_on_off_switch_ep, HA_ONOFF_SWITCH_ENDPOINT);
+    esp_zb_cluster_list_add_custom_cluster(cluster_list, custom_cluster,
+                                           ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+
     zcl_basic_manufacturer_info_t info = {
         .manufacturer_name = ESP_MANUFACTURER_NAME,
         .model_identifier = ESP_MODEL_IDENTIFIER,
@@ -196,7 +243,9 @@ static void zb_coordinator_task(void *params) {
         esp_zb_on_off_switch_ep, HA_ONOFF_SWITCH_ENDPOINT, &info);
     esp_zb_device_register(esp_zb_on_off_switch_ep);
     esp_zb_set_primary_network_channel_set(ZB_C_PRIMARY_CHANNEL_MASK);
+    esp_zb_core_action_handler_register(zb_action_handler);
     ESP_ERROR_CHECK(esp_zb_start(false));
+    ESP_LOGI(TAG, "Starting ZB main loop");
     esp_zb_stack_main_loop();
 }
 
@@ -204,6 +253,8 @@ void zigbee_start(void) {
     if (!zigbee_platform_init()) {
         return;
     }
+
+    ESP_LOGI(TAG, "Starting ZigBee as coordinator");
 
     xTaskCreate(zb_coordinator_task, "ZB_coordinator", 4096, NULL, 5, NULL);
 }
